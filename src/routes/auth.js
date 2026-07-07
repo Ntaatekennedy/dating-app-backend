@@ -11,35 +11,21 @@ const { normalizePhone, generateOtpCode, sendOtpSms } = require('../utils/otp');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES || 5);
-const PHONE_VERIFY_TTL = '15m';
 
 function signToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '30d' });
 }
 
-function signPhoneVerificationToken(phone) {
-  return jwt.sign({ phone, type: 'phone_verify' }, JWT_SECRET, { expiresIn: PHONE_VERIFY_TTL });
-}
-
-function verifyPhoneVerificationToken(token) {
-  const payload = jwt.verify(token, JWT_SECRET);
-  if (payload.type !== 'phone_verify' || !payload.phone) {
-    throw new Error('Invalid verification token');
-  }
-  return payload.phone;
-}
-
-async function createOtp(phone, purpose) {
+async function createLoginOtp(phone) {
   const code = generateOtpCode();
   const id = uuidv4();
-  await pool.query('DELETE FROM phone_otps WHERE phone = ? AND purpose = ?', [phone, purpose]);
+  await pool.query("DELETE FROM phone_otps WHERE phone = ? AND purpose = 'login'", [phone]);
   await pool.query(
     `INSERT INTO phone_otps (id, phone, code, purpose, expires_at)
-     VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
-    [id, phone, code, purpose, OTP_TTL_MINUTES],
+     VALUES (?, ?, ?, 'login', DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
+    [id, phone, code, OTP_TTL_MINUTES],
   );
   await sendOtpSms(phone, code);
-  return code;
 }
 
 async function consumeOtp(phone, code, purpose) {
@@ -57,39 +43,33 @@ async function consumeOtp(phone, code, purpose) {
 router.post('/send-otp', async (req, res) => {
   try {
     const phone = normalizePhone(req.body.phone);
-    const purpose = req.body.purpose;
+    const purpose = req.body.purpose || 'login';
 
     if (!phone) {
       return res.status(400).json({ error: 'Enter a valid phone number with country code' });
     }
-    if (!['login', 'register'].includes(purpose)) {
-      return res.status(400).json({ error: 'Invalid OTP purpose' });
+    if (purpose !== 'login') {
+      return res.status(400).json({ error: 'OTP is only used for sign in' });
     }
 
     const [users] = await pool.query('SELECT id FROM users WHERE phone = ?', [phone]);
-    const exists = users.length > 0;
-
-    if (purpose === 'login' && !exists) {
+    if (!users.length) {
       return res.status(404).json({ error: 'No account found for this phone number' });
     }
-    if (purpose === 'register' && exists) {
-      return res.status(409).json({ error: 'Phone number already registered' });
-    }
 
-    const code = await createOtp(phone, purpose);
-    const response = {
-      message: 'Verification code sent',
+    await createLoginOtp(phone);
+    res.json({
+      message: 'Verification code sent to your phone',
       expiresInMinutes: OTP_TTL_MINUTES,
-    };
-
-    const smsProvider = process.env.SMS_PROVIDER || 'console';
-    if (smsProvider === 'console' || process.env.EXPOSE_OTP === 'true') {
-      response.debugCode = code;
-    }
-
-    res.json(response);
+    });
   } catch (err) {
     console.error(err);
+    if (err.message === 'SMS service is not configured') {
+      return res.status(503).json({ error: 'SMS service is not configured on the server' });
+    }
+    if (err.message === 'Failed to deliver verification code') {
+      return res.status(502).json({ error: 'Could not send verification code to this number' });
+    }
     res.status(500).json({ error: 'Failed to send verification code' });
   }
 });
@@ -127,37 +107,10 @@ router.post('/verify-otp-login', async (req, res) => {
   }
 });
 
-router.post('/verify-otp-register', async (req, res) => {
-  try {
-    const phone = normalizePhone(req.body.phone);
-    const { code } = req.body;
-
-    if (!phone || !code) {
-      return res.status(400).json({ error: 'Phone and verification code required' });
-    }
-
-    const [existing] = await pool.query('SELECT id FROM users WHERE phone = ?', [phone]);
-    if (existing.length) {
-      return res.status(409).json({ error: 'Phone number already registered' });
-    }
-
-    const valid = await consumeOtp(phone, String(code).trim(), 'register');
-    if (!valid) {
-      return res.status(401).json({ error: 'Invalid or expired verification code' });
-    }
-
-    const phoneVerificationToken = signPhoneVerificationToken(phone);
-    res.json({ phoneVerificationToken, phone });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Verification failed' });
-  }
-});
-
 router.post('/register', async (req, res) => {
   try {
     const {
-      phoneVerificationToken,
+      phone,
       displayName,
       dateOfBirth,
       gender,
@@ -165,18 +118,12 @@ router.post('/register', async (req, res) => {
       profileInput = {},
     } = req.body;
 
-    if (!phoneVerificationToken || !displayName || !dateOfBirth || !gender || !interestedIn?.length) {
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone || !displayName || !dateOfBirth || !gender || !interestedIn?.length) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    let phone;
-    try {
-      phone = verifyPhoneVerificationToken(phoneVerificationToken);
-    } catch {
-      return res.status(401).json({ error: 'Phone verification expired. Please verify again.' });
-    }
-
-    const [existing] = await pool.query('SELECT id FROM users WHERE phone = ?', [phone]);
+    const [existing] = await pool.query('SELECT id FROM users WHERE phone = ?', [normalizedPhone]);
     if (existing.length) {
       return res.status(409).json({ error: 'Phone number already registered' });
     }
@@ -193,8 +140,8 @@ router.post('/register', async (req, res) => {
 
       await conn.query(
         `INSERT INTO users (id, email, phone, password_hash, is_verified)
-         VALUES (?, NULL, ?, NULL, TRUE)`,
-        [userId, phone],
+         VALUES (?, NULL, ?, NULL, FALSE)`,
+        [userId, normalizedPhone],
       );
 
       await conn.query(

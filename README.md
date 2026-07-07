@@ -34,10 +34,12 @@ API base URL: `http://localhost:3000`
 
 ## Demo sign-in
 
-**Phone OTP (app default):**
+**Phone OTP (sign in only):**
 - Phone: `+256700100001`
-- Send OTP via `POST /api/auth/send-otp` with `{ "phone": "+256700100001", "purpose": "login" }`
-- In development, the OTP is logged to the console and returned as `debugCode` when `NODE_ENV` is not `production` or `EXPOSE_OTP=true`
+- `POST /api/auth/send-otp` sends an SMS to the phone (Twilio required)
+- `POST /api/auth/verify-otp-login` with `{ "phone", "code" }` completes sign in
+
+**Sign up:** no OTP — `POST /api/auth/register` with `phone` and profile fields.
 
 **Legacy email login:**
 - Email: `demo@dating.app`
@@ -47,10 +49,9 @@ API base URL: `http://localhost:3000`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/auth/send-otp` | Send phone OTP (`purpose`: `login` or `register`) |
+| POST | `/api/auth/send-otp` | Send login OTP via SMS (`purpose` must be `login`) |
 | POST | `/api/auth/verify-otp-login` | Verify OTP and sign in |
-| POST | `/api/auth/verify-otp-register` | Verify OTP for new account |
-| POST | `/api/auth/register` | Create account with `phoneVerificationToken` |
+| POST | `/api/auth/register` | Create account with `phone` (no OTP) |
 | POST | `/api/auth/login` | Legacy email/password login |
 | GET | `/api/auth/me` | Current user + profile |
 | GET | `/api/discover` | Discover profiles |
@@ -80,8 +81,10 @@ Send `Authorization: Bearer <token>` on protected routes.
 |----------|-------------|
 | `JWT_SECRET` | Secret for auth tokens |
 | `OTP_TTL_MINUTES` | OTP expiry (default `5`) |
-| `EXPOSE_OTP=true` | Return OTP in API response (dev only) |
-| `SMS_PROVIDER` | `console` (default) or future SMS integration |
+| `SMS_PROVIDER` | `twilio` (default) or `console` for local logs only |
+| `TWILIO_ACCOUNT_SID` | Twilio account SID |
+| `TWILIO_AUTH_TOKEN` | Twilio auth token |
+| `TWILIO_PHONE_NUMBER` | Twilio sender number (E.164) |
 
 ## Flutter app
 
