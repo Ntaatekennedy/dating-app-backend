@@ -252,8 +252,8 @@ router.get('/me', authRequired, async (req, res) => {
 
     res.json({
       user: mapUser(users[0]),
-      profile: mapProfile(profiles[0]),
-      preferences: mapPreferences(prefs[0]),
+      profile: profiles.length ? mapProfile(profiles[0]) : null,
+      preferences: prefs.length ? mapPreferences(prefs[0]) : null,
     });
   } catch (err) {
     console.error(err);
