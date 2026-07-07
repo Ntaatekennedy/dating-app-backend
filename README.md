@@ -67,11 +67,12 @@ Send `Authorization: Bearer <token>` on protected routes.
 
 ## Flutter app
 
-In `lib/main.dart`, set `kUseApiBackend = true` and adjust `kApiBaseUrl`:
+The Flutter app now reads backend settings from `lib/config/app_config.dart`.
 
-```dart
-const bool kUseApiBackend = true;
-const String kApiBaseUrl = 'http://localhost:3000';
+- `useApiBackend = true` enables the API repository
+- `apiBaseUrl` defaults to Railway for Android
+- You can override at build/run time with:
+
+```bash
+--dart-define=API_BASE_URL=https://your-domain.up.railway.app
 ```
-
-For Android emulator use `http://10.0.2.2:3000`. For a physical device use your PC's LAN IP.

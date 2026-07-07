@@ -9,6 +9,7 @@ const matchesRoutes = require('./routes/matches');
 const profileRoutes = require('./routes/profile');
 const subscriptionRoutes = require('./routes/subscriptions');
 const userRoutes = require('./routes/users');
+const { bootstrapDatabase } = require('../scripts/bootstrap-db');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -33,6 +34,11 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+bootstrapDatabase()
+  .catch((err) => {
+    console.error('Database bootstrap failed:', err.message);
+  });
+
 app.listen(port, () => {
-  console.log(`Dating app API running on http://localhost:${port}`);
+  console.log(`Dating app API running on port ${port}`);
 });

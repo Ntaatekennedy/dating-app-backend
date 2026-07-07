@@ -2,18 +2,29 @@
 
 Deploy from the [Railway dashboard](https://railway.com/dashboard) or the CLI.
 
+## Current deployed setup
+
+- **Railway project:** `spark-dating-backend`
+- **GitHub repo:** `Ntaatekennedy/dating-app-backend`
+- **API service:** `api`
+- **MySQL service:** `MySQL`
+- **Public API URL:** `https://api-production-4f51.up.railway.app`
+
 ## Option A — Dashboard (recommended)
 
 1. Open **[railway.com/dashboard](https://railway.com/dashboard)** and sign in.
-2. **New Project** → **Deploy from GitHub repo** → select **`Ntaatekennedy/dating-app-backend`**.
-3. In the project, click **+ New** → **Database** → **MySQL**.
-4. Open your **API service** → **Variables** → **Add references** from the MySQL service:
-   - `MYSQLHOST` → `DB_HOST`
-   - `MYSQLPORT` → `DB_PORT`
-   - `MYSQLUSER` → `DB_USER`
-   - `MYSQLPASSWORD` → `DB_PASSWORD`
-   - `MYSQLDATABASE` → `DB_NAME`
-5. Add these variables on the API service:
+2. Open project **`spark-dating-backend`**.
+3. Ensure both services exist:
+   - `api` (Node.js backend)
+   - `MySQL` (database)
+4. Open **api** → **Variables** and keep these references:
+   - `DB_HOST=${{MySQL.MYSQLHOST}}`
+   - `DB_PORT=${{MySQL.MYSQLPORT}}`
+   - `DB_USER=${{MySQL.MYSQLUSER}}`
+   - `DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}`
+   - `DB_NAME=${{MySQL.MYSQLDATABASE}}`
+   - `MYSQL_URL=${{MySQL.MYSQL_URL}}`
+5. Add these variables on **api**:
 
    | Variable | Value |
    |----------|--------|
@@ -22,19 +33,20 @@ Deploy from the [Railway dashboard](https://railway.com/dashboard) or the CLI.
 
    `BASE_URL` is optional — Railway’s public domain is used automatically.
 
-6. **Settings** → **Networking** → **Generate Domain** (copy the `*.up.railway.app` URL).
-7. **MySQL** → **Connect** → run `database/dating_app.sql` from the Flutter project (or import via MySQL client).
-8. Redeploy if needed. Test: `https://YOUR-DOMAIN.up.railway.app/health`
+6. **api** → **Settings** → **Networking** should include:
+   - `https://api-production-4f51.up.railway.app`
+7. Redeploy **api** if needed.
+8. Test: `https://api-production-4f51.up.railway.app/health`
 
 ## Option B — CLI
 
 ```bash
 cd backend
 railway login
-railway init
-railway add --database mysql
-railway up
-railway domain
+railway link
+railway service link api
+railway up --service api
+railway domain --service api
 ```
 
 Set `JWT_SECRET` in the Railway dashboard under **Variables**.
@@ -44,7 +56,7 @@ Set `JWT_SECRET` in the Railway dashboard under **Variables**.
 Update `lib/config/app_config.dart`:
 
 ```dart
-static const String _androidLanBaseUrl = 'https://YOUR-DOMAIN.up.railway.app';
+static const String _androidLanBaseUrl = 'https://api-production-4f51.up.railway.app';
 ```
 
 Phone and PC need internet (not local Wi‑Fi only).

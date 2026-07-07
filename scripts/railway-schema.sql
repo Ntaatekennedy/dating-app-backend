@@ -1,0 +1,339 @@
+
+-- ============================================================
+-- TABLES
+-- ============================================================
+
+-- 1. USERS
+CREATE TABLE users (
+    id              CHAR(36)        PRIMARY KEY,
+    email           VARCHAR(255)    NOT NULL UNIQUE,
+    phone           VARCHAR(20)     UNIQUE,
+    password_hash   VARCHAR(255)    NOT NULL,
+    is_verified     BOOLEAN         DEFAULT FALSE,
+    is_active       BOOLEAN         DEFAULT TRUE,
+    last_active_at  TIMESTAMP       NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- 2. PROFILES
+CREATE TABLE profiles (
+    id              CHAR(36)        PRIMARY KEY,
+    user_id         CHAR(36)        NOT NULL UNIQUE,
+    display_name    VARCHAR(100)    NOT NULL,
+    bio             TEXT,
+    date_of_birth   DATE            NOT NULL,
+    gender          VARCHAR(20)     NOT NULL,
+    interested_in   JSON            NOT NULL,
+    height_cm       SMALLINT,
+    job_title       VARCHAR(100),
+    education       VARCHAR(100),
+    latitude        DECIMAL(10, 8)  NULL,
+    longitude       DECIMAL(11, 8)  NULL,
+    city            VARCHAR(100),
+    country         VARCHAR(100),
+    relationship_type ENUM('long_term', 'short_term', 'just_fun', 'making_friends') NULL,
+    is_visible      BOOLEAN         DEFAULT TRUE,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_profiles_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_profiles_gender    ON profiles(gender);
+CREATE INDEX idx_profiles_location  ON profiles(latitude, longitude);
+CREATE INDEX idx_profiles_visible   ON profiles(is_visible);
+
+-- 3. PHOTOS
+CREATE TABLE photos (
+    id              CHAR(36)        PRIMARY KEY,
+    user_id         CHAR(36)        NOT NULL,
+    url             TEXT            NOT NULL,
+    sort_order      SMALLINT        DEFAULT 0,
+    is_approved     BOOLEAN         DEFAULT FALSE,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_photos_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_photos_user ON photos(user_id);
+
+-- 4. PREFERENCES
+CREATE TABLE preferences (
+    id              CHAR(36)        PRIMARY KEY,
+    user_id         CHAR(36)        NOT NULL UNIQUE,
+    min_age         SMALLINT        DEFAULT 18,
+    max_age         SMALLINT        DEFAULT 99,
+    max_distance_km SMALLINT        DEFAULT 50,
+    show_me         JSON            NOT NULL,
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_preferences_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 5. SWIPES
+CREATE TABLE swipes (
+    id              CHAR(36)        PRIMARY KEY,
+    swiper_id       CHAR(36)        NOT NULL,
+    swiped_id       CHAR(36)        NOT NULL,
+    action          ENUM('like', 'pass', 'super_like') NOT NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_swipes_swiper
+        FOREIGN KEY (swiper_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_swipes_swiped
+        FOREIGN KEY (swiped_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT uq_swipe_pair
+        UNIQUE (swiper_id, swiped_id)
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_swipes_swiper ON swipes(swiper_id);
+CREATE INDEX idx_swipes_swiped ON swipes(swiped_id, action);
+
+-- 6. MATCHES
+CREATE TABLE matches (
+    id              CHAR(36)        PRIMARY KEY,
+    user1_id        CHAR(36)        NOT NULL,
+    user2_id        CHAR(36)        NOT NULL,
+    matched_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    is_active       BOOLEAN         DEFAULT TRUE,
+
+    CONSTRAINT fk_matches_user1
+        FOREIGN KEY (user1_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_matches_user2
+        FOREIGN KEY (user2_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT uq_match_pair
+        UNIQUE (user1_id, user2_id),
+    CONSTRAINT chk_user_order
+        CHECK (user1_id < user2_id)
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_matches_user1 ON matches(user1_id, is_active);
+CREATE INDEX idx_matches_user2 ON matches(user2_id, is_active);
+
+-- 7. MESSAGES
+CREATE TABLE messages (
+    id              CHAR(36)        PRIMARY KEY,
+    match_id        CHAR(36)        NOT NULL,
+    sender_id       CHAR(36)        NOT NULL,
+    content         TEXT            NOT NULL,
+    is_read         BOOLEAN         DEFAULT FALSE,
+    sent_at         TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_messages_match
+        FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+    CONSTRAINT fk_messages_sender
+        FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_messages_match  ON messages(match_id, sent_at DESC);
+CREATE INDEX idx_messages_unread ON messages(match_id, is_read);
+
+-- 8. BLOCKS
+CREATE TABLE blocks (
+    id              CHAR(36)        PRIMARY KEY,
+    blocker_id      CHAR(36)        NOT NULL,
+    blocked_id      CHAR(36)        NOT NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_blocks_blocker
+        FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_blocks_blocked
+        FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT uq_block_pair
+        UNIQUE (blocker_id, blocked_id)
+) ENGINE=InnoDB;
+
+-- 9. REPORTS
+CREATE TABLE reports (
+    id              CHAR(36)        PRIMARY KEY,
+    reporter_id     CHAR(36)        NOT NULL,
+    reported_id     CHAR(36)        NOT NULL,
+    reason          ENUM(
+                        'fake_profile',
+                        'inappropriate_content',
+                        'harassment',
+                        'spam',
+                        'underage',
+                        'other'
+                    ) NOT NULL,
+    details         TEXT,
+    status          ENUM('pending', 'reviewed', 'actioned') DEFAULT 'pending',
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_reports_reporter
+        FOREIGN KEY (reporter_id) REFERENCES users(id),
+    CONSTRAINT fk_reports_reported
+        FOREIGN KEY (reported_id) REFERENCES users(id)
+) ENGINE=InnoDB;
+
+-- 10. SUBSCRIPTIONS
+CREATE TABLE subscriptions (
+    id              CHAR(36)        PRIMARY KEY,
+    user_id         CHAR(36)        NOT NULL,
+    plan            ENUM('free', 'daily', 'weekly', 'monthly') DEFAULT 'free',
+    starts_at       TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    expires_at      TIMESTAMP       NULL,
+    is_active       BOOLEAN         DEFAULT TRUE,
+    payment_phone   VARCHAR(20)     NULL,
+
+    CONSTRAINT fk_subscriptions_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 11. INTERESTS
+CREATE TABLE interests (
+    id      INT             AUTO_INCREMENT PRIMARY KEY,
+    name    VARCHAR(50)     NOT NULL UNIQUE
+) ENGINE=InnoDB;
+
+CREATE TABLE user_interests (
+    user_id     CHAR(36)    NOT NULL,
+    interest_id INT         NOT NULL,
+
+    PRIMARY KEY (user_id, interest_id),
+    CONSTRAINT fk_ui_user
+        FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE,
+    CONSTRAINT fk_ui_interest
+        FOREIGN KEY (interest_id) REFERENCES interests(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- ============================================================
+-- SAMPLE DATA (matches Flutter mock users)
+-- Demo password: password123 (plain text for local dev only)
+-- ============================================================
+
+INSERT INTO interests (name) VALUES
+    ('Travel'), ('Music'), ('Fitness'), ('Cooking'),
+    ('Photography'), ('Movies'), ('Hiking'), ('Reading');
+
+INSERT INTO users (id, email, phone, password_hash, is_verified, last_active_at) VALUES
+    ('user-demo-me', 'demo@dating.app', '+256700100001', 'password123', TRUE, NOW()),
+    ('user-001', 'emma@example.com', '+256700100002', 'password123', TRUE, NOW()),
+    ('user-002', 'sophia@example.com', '+256700100003', 'password123', TRUE, NOW()),
+    ('user-003', 'mia@example.com', '+256700100004', 'password123', TRUE, NOW()),
+    ('user-004', 'olivia@example.com', '+256700100005', 'password123', TRUE, NOW()),
+    ('user-005', 'ava@example.com', '+256700100006', 'password123', TRUE, NOW());
+
+INSERT INTO profiles (id, user_id, display_name, bio, date_of_birth, gender, interested_in,
+    height_cm, job_title, education, latitude, longitude, city, country, relationship_type) VALUES
+    ('profile-user-demo-me', 'user-demo-me', 'Alex',
+     'Coffee lover, weekend hiker, always up for new adventures.',
+     '1995-06-15', 'male', '["female", "non_binary"]',
+     170, 'Software Engineer', 'BSc Computer Science', 41.0082, 28.9784, 'Istanbul', 'Turkey', 'long_term'),
+    ('profile-user-001', 'user-001', 'Emma',
+     'Art gallery weekends and spontaneous road trips.',
+     '1997-03-22', 'female', '["male"]',
+     170, 'Graphic Designer', 'BA Fine Arts', 41.015, 28.98, 'Istanbul', 'Turkey', 'long_term'),
+    ('profile-user-002', 'user-002', 'Sophia',
+     'Yoga instructor. Looking for genuine connections.',
+     '1994-11-08', 'female', '["male", "non_binary"]',
+     170, 'Yoga Instructor', 'Certified Yoga Teacher', 41.02, 28.965, 'Istanbul', 'Turkey', 'short_term'),
+    ('profile-user-003', 'user-003', 'Mia',
+     'Bookworm by day, concert-goer by night.',
+     '1999-07-30', 'female', '["male"]',
+     170, 'Marketing Specialist', 'MBA', 39.9334, 32.8597, 'Ankara', 'Turkey', 'just_fun'),
+    ('profile-user-004', 'user-004', 'Olivia',
+     'Foodie exploring every hidden gem in the city.',
+     '1996-01-14', 'female', '["male"]',
+     170, 'Chef', 'Culinary Institute', 38.4237, 27.1428, 'Izmir', 'Turkey', 'making_friends'),
+    ('profile-user-005', 'user-005', 'Ava',
+     'Photographer capturing moments and making memories.',
+     '1998-09-05', 'non_binary', '["male", "female", "non_binary"]',
+     170, 'Photographer', 'BA Visual Arts', 41.01, 28.97, 'Istanbul', 'Turkey', 'making_friends');
+
+INSERT INTO photos (id, user_id, url, sort_order, is_approved) VALUES
+    ('photo-user-demo-me', 'user-demo-me', 'https://picsum.photos/seed/alex/600/800', 0, TRUE),
+    ('photo-user-001', 'user-001', 'https://picsum.photos/seed/emma/600/800', 0, TRUE),
+    ('photo-user-002', 'user-002', 'https://picsum.photos/seed/sophia/600/800', 0, TRUE),
+    ('photo-user-003', 'user-003', 'https://picsum.photos/seed/mia/600/800', 0, TRUE),
+    ('photo-user-004', 'user-004', 'https://picsum.photos/seed/olivia/600/800', 0, TRUE),
+    ('photo-user-005', 'user-005', 'https://picsum.photos/seed/ava/600/800', 0, TRUE);
+
+INSERT INTO preferences (id, user_id, min_age, max_age, max_distance_km, show_me) VALUES
+    ('pref-user-demo-me', 'user-demo-me', 18, 99, 50, '["female", "non_binary"]'),
+    ('pref-user-001', 'user-001', 18, 99, 50, '["male"]'),
+    ('pref-user-002', 'user-002', 18, 99, 50, '["male", "non_binary"]'),
+    ('pref-user-003', 'user-003', 18, 99, 50, '["male"]'),
+    ('pref-user-004', 'user-004', 18, 99, 50, '["male"]'),
+    ('pref-user-005', 'user-005', 18, 99, 50, '["male", "female", "non_binary"]');
+
+INSERT INTO subscriptions (id, user_id, plan, is_active) VALUES
+    ('sub-user-demo-me', 'user-demo-me', 'free', TRUE),
+    ('sub-user-001', 'user-001', 'free', TRUE),
+    ('sub-user-002', 'user-002', 'free', TRUE),
+    ('sub-user-003', 'user-003', 'free', TRUE),
+    ('sub-user-004', 'user-004', 'free', TRUE),
+    ('sub-user-005', 'user-005', 'free', TRUE);
+
+INSERT INTO user_interests (user_id, interest_id) VALUES
+    ('user-demo-me', 1), ('user-demo-me', 3), ('user-demo-me', 7),
+    ('user-001', 1), ('user-001', 2), ('user-001', 5),
+    ('user-002', 3), ('user-002', 4), ('user-002', 7),
+    ('user-003', 2), ('user-003', 6), ('user-003', 8),
+    ('user-004', 4), ('user-004', 1), ('user-004', 6),
+    ('user-005', 5), ('user-005', 1), ('user-005', 2);
+
+INSERT INTO matches (id, user1_id, user2_id, matched_at) VALUES
+    ('match-001', 'user-001', 'user-demo-me', DATE_SUB(NOW(), INTERVAL 2 DAY));
+
+INSERT INTO messages (id, match_id, sender_id, content, is_read, sent_at) VALUES
+    ('msg-001', 'match-001', 'user-001', 'Hey! Love your profile 😊', TRUE, DATE_SUB(NOW(), INTERVAL 5 HOUR)),
+    ('msg-002', 'match-001', 'user-demo-me', 'Thanks! Your art photos are amazing.', TRUE, DATE_SUB(NOW(), INTERVAL 4 HOUR)),
+    ('msg-003', 'match-001', 'user-001', 'Want to grab coffee this weekend?', FALSE, DATE_SUB(NOW(), INTERVAL 1 HOUR));
+
+-- Sophia already liked Alex — liking her back in the app creates a match
+INSERT INTO swipes (id, swiper_id, swiped_id, action) VALUES
+    ('swipe-sophia-like', 'user-002', 'user-demo-me', 'like');
+
+-- ============================================================
+-- REFERENCE QUERIES (for your backend — not executed here)
+-- ============================================================
+/*
+-- Discover profiles
+SELECT p.*, ph.url AS primary_photo
+FROM profiles p
+JOIN photos ph ON ph.user_id = p.user_id AND ph.sort_order = 0
+WHERE p.user_id != :current_user_id
+  AND p.is_visible = TRUE
+  AND JSON_CONTAINS(:show_me, JSON_QUOTE(p.gender))
+  AND TIMESTAMPDIFF(YEAR, p.date_of_birth, CURDATE()) BETWEEN :min_age AND :max_age
+  AND (
+      6371 * ACOS(
+          COS(RADIANS(:my_lat)) * COS(RADIANS(p.latitude))
+          * COS(RADIANS(p.longitude) - RADIANS(:my_lng))
+          + SIN(RADIANS(:my_lat)) * SIN(RADIANS(p.latitude))
+      )
+  ) <= :max_distance_km
+  AND p.user_id NOT IN (
+      SELECT swiped_id FROM swipes WHERE swiper_id = :current_user_id
+  )
+  AND p.user_id NOT IN (
+      SELECT blocked_id FROM blocks WHERE blocker_id = :current_user_id
+      UNION
+      SELECT blocker_id FROM blocks WHERE blocked_id = :current_user_id
+  )
+ORDER BY p.updated_at DESC
+LIMIT 20;
+
+-- Match list with last message
+SELECT
+    m.*,
+    CASE WHEN m.user1_id = :me THEN p2.display_name ELSE p1.display_name END AS match_name,
+    msg.content     AS last_message,
+    msg.sent_at     AS last_message_at
+FROM matches m
+JOIN profiles p1 ON p1.user_id = m.user1_id
+JOIN profiles p2 ON p2.user_id = m.user2_id
+LEFT JOIN (
+    SELECT match_id, content, sent_at,
+           ROW_NUMBER() OVER (PARTITION BY match_id ORDER BY sent_at DESC) AS rn
+    FROM messages
+) msg ON msg.match_id = m.id AND msg.rn = 1
+WHERE (m.user1_id = :me OR m.user2_id = :me)
+  AND m.is_active = TRUE
+ORDER BY msg.sent_at DESC;
+*/
