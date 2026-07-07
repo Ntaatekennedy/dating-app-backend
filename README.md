@@ -1,6 +1,6 @@
 # Dating App Backend
 
-Node.js REST API for the Spark Dating Flutter app. Uses MySQL and mirrors the `dating_app.sql` schema.
+Node.js REST API for the Spark Dating Flutter app (v1.0.18). Uses MySQL and mirrors the `dating_app.sql` schema.
 
 ## Setup
 

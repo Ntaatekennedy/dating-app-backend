@@ -19,7 +19,7 @@ INSERT IGNORE INTO profiles (id, user_id, display_name, bio, date_of_birth, gend
      178, 'Entrepreneur', 'MBA', 0.3476, 32.5825, 'Kampala', 'Uganda', 'long_term'),
     ('profile-user-007', 'user-007', 'Zara',
      'Nurse by day, dancer by night. Good vibes only.',
-     '1996-12-02', 'female', '["male"]',
+     '1996-12-02', 'female', '["male", "female", "non_binary"]',
      165, 'Registered Nurse', 'BSc Nursing', 0.0564, 32.4637, 'Entebbe', 'Uganda', 'short_term'),
     ('profile-user-008', 'user-008', 'Daniel',
      'Cyclist, coffee nerd, and amateur chef.',
@@ -27,7 +27,7 @@ INSERT IGNORE INTO profiles (id, user_id, display_name, bio, date_of_birth, gend
      182, 'Product Manager', 'BSc Information Systems', 0.4244, 33.2042, 'Jinja', 'Uganda', 'making_friends'),
     ('profile-user-009', 'user-009', 'Lily',
      'Fashion stylist with a soft spot for vintage markets.',
-     '2000-02-14', 'female', '["male"]',
+     '2000-02-14', 'female', '["male", "female", "non_binary"]',
      168, 'Fashion Stylist', 'Diploma Fashion Design', 0.3510, 32.5900, 'Kampala', 'Uganda', 'just_fun'),
     ('profile-user-010', 'user-010', 'Noah',
      'Personal trainer helping people crush their goals.',
@@ -35,7 +35,7 @@ INSERT IGNORE INTO profiles (id, user_id, display_name, bio, date_of_birth, gend
      185, 'Personal Trainer', 'Certified Fitness Coach', 0.3400, 32.5750, 'Kampala', 'Uganda', 'short_term'),
     ('profile-user-011', 'user-011', 'Chloe',
      'Teacher, book club host, and weekend brunch enthusiast.',
-     '1997-10-21', 'female', '["male", "non_binary"]',
+     '1997-10-21', 'female', '["male", "female", "non_binary"]',
      172, 'High School Teacher', 'BA Education', -0.6100, 30.6580, 'Mbarara', 'Uganda', 'long_term');
 
 INSERT IGNORE INTO photos (id, user_id, url, sort_order, is_approved) VALUES

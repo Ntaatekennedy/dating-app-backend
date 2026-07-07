@@ -1,4 +1,4 @@
--- Let existing users see male, female, and non-binary in Discover.
+-- Run on production to let existing users see male, female, and non-binary in Discover.
 UPDATE preferences
 SET show_me = '["male", "female", "non_binary"]',
     updated_at = NOW();
