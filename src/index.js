@@ -8,6 +8,7 @@ const discoverRoutes = require('./routes/discover');
 const matchesRoutes = require('./routes/matches');
 const profileRoutes = require('./routes/profile');
 const subscriptionRoutes = require('./routes/subscriptions');
+const likesRoutes = require('./routes/likes');
 const userRoutes = require('./routes/users');
 const { bootstrapDatabase } = require('../scripts/bootstrap-db');
 const { ensureAuthMigrations, ensureProductionDataMigrations } = require('./utils/migrate');
@@ -26,6 +27,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/discover', discoverRoutes);
 app.use('/api/matches', matchesRoutes);
+app.use('/api/likes', likesRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/users', userRoutes);

@@ -97,31 +97,6 @@ router.get('/', authRequired, async (req, res) => {
       summaries.push(await buildOtherUserSummary(meId, otherId, m, true));
     }
 
-    let likedQuery = `
-      SELECT swiped_id, created_at
-      FROM swipes
-      WHERE swiper_id = ? AND action IN ('like', 'super_like')
-    `;
-    const likedParams = [meId];
-    if (matchedOtherIds.size > 0) {
-      const placeholders = [...matchedOtherIds].map(() => '?').join(',');
-      likedQuery += ` AND swiped_id NOT IN (${placeholders})`;
-      likedParams.push(...matchedOtherIds);
-    }
-    const [likedRows] = await pool.query(likedQuery, likedParams);
-
-    for (const row of likedRows) {
-      const otherId = row.swiped_id;
-      const [u1, u2] = orderedPair(meId, otherId);
-      summaries.push(await buildOtherUserSummary(meId, otherId, {
-        id: `pending-${u1}-${u2}`,
-        user1_id: u1,
-        user2_id: u2,
-        matched_at: row.created_at,
-        is_active: 1,
-      }, false));
-    }
-
     summaries.sort((a, b) => {
       const aTime = new Date(a.lastMessageAt || a.match.matchedAt);
       const bTime = new Date(b.lastMessageAt || b.match.matchedAt);
