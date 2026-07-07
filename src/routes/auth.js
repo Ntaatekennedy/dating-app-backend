@@ -189,11 +189,19 @@ router.post('/register', async (req, res) => {
       );
 
       if (profileInput.interestIds?.length) {
-        for (const interestId of profileInput.interestIds) {
-          await conn.query(
-            'INSERT INTO user_interests (user_id, interest_id) VALUES (?, ?)',
-            [userId, interestId],
+        const ids = profileInput.interestIds.filter((id) => Number.isInteger(id));
+        if (ids.length) {
+          const placeholders = ids.map(() => '?').join(',');
+          const [validRows] = await conn.query(
+            `SELECT id FROM interests WHERE id IN (${placeholders})`,
+            ids,
           );
+          for (const row of validRows) {
+            await conn.query(
+              'INSERT INTO user_interests (user_id, interest_id) VALUES (?, ?)',
+              [userId, row.id],
+            );
+          }
         }
       }
 
@@ -209,7 +217,10 @@ router.post('/register', async (req, res) => {
     const [users] = await pool.query('SELECT * FROM users WHERE id = ?', [userId]);
     res.status(201).json({ token, user: mapUser(users[0]) });
   } catch (err) {
-    console.error(err);
+    console.error('Registration failed:', err);
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'Email already registered' });
+    }
     res.status(500).json({ error: 'Registration failed' });
   }
 });
