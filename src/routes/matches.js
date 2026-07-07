@@ -3,8 +3,58 @@ const { v4: uuidv4 } = require('uuid');
 const pool = require('../config/db');
 const { authRequired } = require('../middleware/auth');
 const { mapProfile, mapMatch, mapMessage } = require('../utils/mappers');
+const { orderedPair } = require('../utils/helpers');
+const { resolveBaseUrl } = require('../utils/baseUrl');
 
 const router = express.Router();
+
+function resolvePhotoUrl(baseUrl, userId, rawUrl) {
+  if (!rawUrl) return `https://picsum.photos/seed/${userId}/600/800`;
+  if (rawUrl.startsWith('http')) return rawUrl;
+  return `${baseUrl}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+}
+
+async function buildOtherUserSummary(meId, otherId, matchRow, isMutual) {
+  const baseUrl = resolveBaseUrl();
+  const [[profile]] = await pool.query('SELECT * FROM profiles WHERE user_id = ?', [otherId]);
+  const [[photo]] = await pool.query(
+    'SELECT url FROM photos WHERE user_id = ? ORDER BY sort_order ASC LIMIT 1',
+    [otherId],
+  );
+
+  let last = null;
+  let unread = { c: 0 };
+  if (isMutual && matchRow.id && !String(matchRow.id).startsWith('pending-')) {
+    const [msgs] = await pool.query(
+      'SELECT * FROM messages WHERE match_id = ? ORDER BY sent_at DESC LIMIT 1',
+      [matchRow.id],
+    );
+    last = msgs[0];
+    [[unread]] = await pool.query(
+      `SELECT COUNT(*) AS c FROM messages
+       WHERE match_id = ? AND sender_id != ? AND is_read = FALSE`,
+      [matchRow.id, meId],
+    );
+  }
+
+  const [[otherUser]] = await pool.query(
+    'SELECT last_active_at FROM users WHERE id = ?',
+    [otherId],
+  );
+
+  const photoUrl = resolvePhotoUrl(baseUrl, otherId, photo?.url);
+
+  return {
+    match: mapMatch(matchRow),
+    otherProfile: mapProfile(profile),
+    primaryPhotoUrl: photoUrl,
+    lastMessage: isMutual ? (last?.content || null) : 'You liked them',
+    lastMessageAt: isMutual ? (last?.sent_at || null) : matchRow.matched_at,
+    unreadCount: isMutual ? (unread?.c || 0) : 0,
+    otherLastActiveAt: otherUser?.last_active_at || null,
+    isMutual,
+  };
+}
 
 async function getActiveSubscription(userId) {
   const [rows] = await pool.query(
@@ -18,6 +68,9 @@ async function getActiveSubscription(userId) {
 }
 
 async function assertMatchMember(matchId, userId) {
+  if (String(matchId).startsWith('pending-')) {
+    return null;
+  }
   const [rows] = await pool.query(
     `SELECT * FROM matches
      WHERE id = ? AND is_active = TRUE AND (user1_id = ? OR user2_id = ?)`,
@@ -36,41 +89,37 @@ router.get('/', authRequired, async (req, res) => {
     );
 
     const summaries = [];
+    const matchedOtherIds = new Set();
 
     for (const m of matches) {
       const otherId = m.user1_id === meId ? m.user2_id : m.user1_id;
-      const [[profile]] = await pool.query('SELECT * FROM profiles WHERE user_id = ?', [otherId]);
-      const [[photo]] = await pool.query(
-        'SELECT url FROM photos WHERE user_id = ? ORDER BY sort_order ASC LIMIT 1',
-        [otherId],
-      );
+      matchedOtherIds.add(otherId);
+      summaries.push(await buildOtherUserSummary(meId, otherId, m, true));
+    }
 
-      const [msgs] = await pool.query(
-        'SELECT * FROM messages WHERE match_id = ? ORDER BY sent_at DESC LIMIT 1',
-        [m.id],
-      );
-      const last = msgs[0];
+    let likedQuery = `
+      SELECT swiped_id, created_at
+      FROM swipes
+      WHERE swiper_id = ? AND action IN ('like', 'super_like')
+    `;
+    const likedParams = [meId];
+    if (matchedOtherIds.size > 0) {
+      const placeholders = [...matchedOtherIds].map(() => '?').join(',');
+      likedQuery += ` AND swiped_id NOT IN (${placeholders})`;
+      likedParams.push(...matchedOtherIds);
+    }
+    const [likedRows] = await pool.query(likedQuery, likedParams);
 
-      const [[unread]] = await pool.query(
-        `SELECT COUNT(*) AS c FROM messages
-         WHERE match_id = ? AND sender_id != ? AND is_read = FALSE`,
-        [m.id, meId],
-      );
-
-      const [[otherUser]] = await pool.query(
-        'SELECT last_active_at FROM users WHERE id = ?',
-        [otherId],
-      );
-
-      summaries.push({
-        match: mapMatch(m),
-        otherProfile: mapProfile(profile),
-        primaryPhotoUrl: photo?.url || `https://picsum.photos/seed/${otherId}/600/800`,
-        lastMessage: last?.content || null,
-        lastMessageAt: last?.sent_at || null,
-        unreadCount: unread?.c || 0,
-        otherLastActiveAt: otherUser?.last_active_at || null,
-      });
+    for (const row of likedRows) {
+      const otherId = row.swiped_id;
+      const [u1, u2] = orderedPair(meId, otherId);
+      summaries.push(await buildOtherUserSummary(meId, otherId, {
+        id: `pending-${u1}-${u2}`,
+        user1_id: u1,
+        user2_id: u2,
+        matched_at: row.created_at,
+        is_active: 1,
+      }, false));
     }
 
     summaries.sort((a, b) => {
