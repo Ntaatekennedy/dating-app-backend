@@ -225,6 +225,89 @@ router.post('/register', async (req, res) => {
   }
 });
 
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'Enter a valid email address' });
+    }
+
+    const [rows] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (!rows.length) {
+      return res.json({
+        message: 'If an account exists for this email, a reset code has been sent',
+      });
+    }
+
+    const code = generateOtpCode();
+    const id = uuidv4();
+    await pool.query('DELETE FROM password_reset_codes WHERE email = ?', [email]);
+    await pool.query(
+      `INSERT INTO password_reset_codes (id, email, code, expires_at)
+       VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
+      [id, email, code, OTP_TTL_MINUTES],
+    );
+
+    console.log(`[Password reset] ${email} -> ${code}`);
+
+    res.json({
+      message: 'If an account exists for this email, a reset code has been sent',
+      expiresInMinutes: OTP_TTL_MINUTES,
+      debugCode: code,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to send reset code' });
+  }
+});
+
+async function consumePasswordResetCode(email, code) {
+  const [rows] = await pool.query(
+    `SELECT * FROM password_reset_codes
+     WHERE email = ? AND code = ? AND used_at IS NULL AND expires_at > NOW()
+     ORDER BY created_at DESC LIMIT 1`,
+    [email, code],
+  );
+  if (!rows.length) return false;
+  await pool.query('UPDATE password_reset_codes SET used_at = NOW() WHERE id = ?', [rows[0].id]);
+  return true;
+}
+
+router.post('/reset-password', async (req, res) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    const { code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ error: 'Email, reset code, and new password required' });
+    }
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const valid = await consumePasswordResetCode(email, String(code).trim());
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid or expired reset code' });
+    }
+
+    const [rows] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (!rows.length) {
+      return res.status(404).json({ error: 'No account found for this email' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      'UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?',
+      [hash, rows[0].id],
+    );
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -249,6 +332,17 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+router.post('/ping', authRequired, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    await pool.query('UPDATE users SET last_active_at = NOW() WHERE id = ?', [userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update activity' });
   }
 });
 

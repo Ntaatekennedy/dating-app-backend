@@ -57,6 +57,11 @@ router.get('/', authRequired, async (req, res) => {
         [m.id, meId],
       );
 
+      const [[otherUser]] = await pool.query(
+        'SELECT last_active_at FROM users WHERE id = ?',
+        [otherId],
+      );
+
       summaries.push({
         match: mapMatch(m),
         otherProfile: mapProfile(profile),
@@ -64,6 +69,7 @@ router.get('/', authRequired, async (req, res) => {
         lastMessage: last?.content || null,
         lastMessageAt: last?.sent_at || null,
         unreadCount: unread?.c || 0,
+        otherLastActiveAt: otherUser?.last_active_at || null,
       });
     }
 

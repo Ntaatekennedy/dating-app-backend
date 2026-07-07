@@ -34,9 +34,10 @@ router.get('/', authRequired, async (req, res) => {
     }
 
     const [profiles] = await pool.query(
-      `SELECT p.*, ph.url AS primary_photo_url
+      `SELECT p.*, ph.url AS primary_photo_url, u.last_active_at
        FROM profiles p
        JOIN photos ph ON ph.user_id = p.user_id AND ph.sort_order = 0
+       JOIN users u ON u.id = p.user_id
        WHERE p.user_id != ? AND p.is_visible = TRUE`,
       [meId],
     );
@@ -79,6 +80,7 @@ router.get('/', authRequired, async (req, res) => {
         primaryPhotoUrl: row.primary_photo_url,
         distanceKm,
         interests: interestRows.map((i) => i.name),
+        lastActiveAt: row.last_active_at,
       });
     }
 

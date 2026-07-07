@@ -45,25 +45,31 @@ Phone OTP routes (`/send-otp`, `/verify-otp-login`) remain available for optiona
 |--------|----------|-------------|
 | POST | `/api/auth/register` | Create account with `email`, `password`, and profile fields |
 | POST | `/api/auth/login` | Email/password login |
+| POST | `/api/auth/forgot-password` | Request password reset code by email |
+| POST | `/api/auth/reset-password` | Reset password with email + code |
+| POST | `/api/auth/ping` | Update current user's `last_active_at` (online status) |
 | POST | `/api/auth/send-otp` | Send login OTP via SMS (optional) |
 | POST | `/api/auth/verify-otp-login` | Verify OTP and sign in (optional) |
 | GET | `/api/auth/me` | Current user + profile |
-| GET | `/api/discover` | Discover profiles |
+| GET | `/api/discover` | Discover profiles (includes `lastActiveAt`) |
 | POST | `/api/discover/swipe` | Swipe on a user |
-| GET | `/api/matches` | List matches |
+| GET | `/api/matches` | List matches (includes `otherLastActiveAt`) |
 | GET | `/api/matches/:id/messages` | Chat messages |
-| POST | `/api/matches/:id/messages` | Send message (subscription) |
+| POST | `/api/matches/:id/messages` | Send message |
 | POST | `/api/matches/:id/read` | Mark messages read |
 | PUT | `/api/profile/profile` | Update profile |
 | PUT | `/api/profile/preferences` | Update preferences |
-| GET | `/api/profile/interests` | All interests |
+| GET | `/api/profile/interests` | All interests (public) |
 | PUT | `/api/profile/interests` | Set user interests |
 | PUT | `/api/profile/phone` | Update own phone |
-| POST | `/api/profile/photo` | Upload primary photo |
+| GET | `/api/profile/photos/:userId` | List user photos |
+| POST | `/api/profile/photo` | Upload or replace primary photo |
+| POST | `/api/profile/photos` | Add gallery photo (max 6) |
+| DELETE | `/api/profile/photos/:photoId` | Delete a photo (including last one) |
 | GET | `/api/subscriptions/status` | Chat/phone access status |
 | POST | `/api/subscriptions/purchase` | Buy subscription |
-| GET | `/api/users/:id/public` | Public profile |
-| GET | `/api/users/:id/phone` | Phone number (masked without subscription) |
+| GET | `/api/users/:id/public` | Public profile (includes `lastActiveAt`) |
+| GET | `/api/users/:id/phone` | Phone number (always masked) |
 | POST | `/api/users/:id/block` | Block user |
 | POST | `/api/users/:id/report` | Report user |
 

@@ -179,4 +179,97 @@ router.post('/photo', authRequired, upload.single('photo'), async (req, res) => 
   }
 });
 
+const MAX_PHOTOS = 6;
+
+async function renumberUserPhotos(userId) {
+  const [rows] = await pool.query(
+    'SELECT id FROM photos WHERE user_id = ? ORDER BY sort_order ASC',
+    [userId],
+  );
+  for (let i = 0; i < rows.length; i++) {
+    await pool.query('UPDATE photos SET sort_order = ? WHERE id = ?', [i, rows[i].id]);
+  }
+}
+
+function deleteStoredPhotoFile(url) {
+  if (!url || !url.startsWith('/uploads/')) return;
+  const filePath = path.join(__dirname, '../..', url);
+  fs.unlink(filePath, () => {});
+}
+
+router.post('/photos', authRequired, upload.single('photo'), async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const baseUrl = resolveBaseUrl();
+    let url = req.body?.url;
+
+    if (req.file) {
+      url = `/uploads/${req.file.filename}`;
+    }
+
+    if (!url) {
+      return res.status(400).json({ error: 'Photo file or url required' });
+    }
+
+    const [[countRow]] = await pool.query(
+      'SELECT COUNT(*) AS c FROM photos WHERE user_id = ?',
+      [userId],
+    );
+    if (Number(countRow.c) >= MAX_PHOTOS) {
+      return res.status(400).json({ error: `Maximum ${MAX_PHOTOS} photos allowed` });
+    }
+
+    const [[maxRow]] = await pool.query(
+      'SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM photos WHERE user_id = ?',
+      [userId],
+    );
+    const sortOrder = Number(maxRow.max_order) + 1;
+
+    const id = uuidv4();
+    await pool.query(
+      'INSERT INTO photos (id, user_id, url, sort_order, is_approved) VALUES (?, ?, ?, ?, TRUE)',
+      [id, userId, url, sortOrder],
+    );
+    const [[row]] = await pool.query('SELECT * FROM photos WHERE id = ?', [id]);
+    res.status(201).json(mapPhoto(row, baseUrl));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to add photo' });
+  }
+});
+
+router.delete('/photos/:photoId', authRequired, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { photoId } = req.params;
+
+    const [[photo]] = await pool.query(
+      'SELECT * FROM photos WHERE id = ? AND user_id = ?',
+      [photoId, userId],
+    );
+    if (!photo) {
+      return res.status(404).json({ error: 'Photo not found' });
+    }
+
+    const [[countRow]] = await pool.query(
+      'SELECT COUNT(*) AS c FROM photos WHERE user_id = ?',
+      [userId],
+    );
+    if (Number(countRow.c) <= 1) {
+      await pool.query('DELETE FROM photos WHERE id = ?', [photoId]);
+      deleteStoredPhotoFile(photo.url);
+      return res.json({ ok: true });
+    }
+
+    await pool.query('DELETE FROM photos WHERE id = ?', [photoId]);
+    await renumberUserPhotos(userId);
+    deleteStoredPhotoFile(photo.url);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete photo' });
+  }
+});
+
 module.exports = router;

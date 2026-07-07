@@ -41,10 +41,13 @@ router.get('/:userId/public', authRequired, async (req, res) => {
       [userId],
     );
 
+    const [[userRow]] = await pool.query('SELECT last_active_at FROM users WHERE id = ?', [userId]);
+
     res.json({
       profile: mapProfile(profile),
       primaryPhotoUrl: photo.url,
       interests: interests.map((i) => i.name),
+      lastActiveAt: userRow?.last_active_at || null,
     });
   } catch (err) {
     console.error(err);
