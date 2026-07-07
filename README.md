@@ -81,7 +81,10 @@ Send `Authorization: Bearer <token>` on protected routes.
 |----------|-------------|
 | `JWT_SECRET` | Secret for auth tokens |
 | `OTP_TTL_MINUTES` | OTP expiry (default `5`) |
-| `SMS_PROVIDER` | `twilio` (default) or `console` for local logs only |
+| `SMS_PROVIDER` | `africas_talking` (default), `twilio`, or `console` (local logs only) |
+| `AFRICAS_TALKING_USERNAME` | Africa's Talking app username |
+| `AFRICAS_TALKING_API_KEY` | Africa's Talking API key |
+| `AFRICAS_TALKING_SENDER_ID` | Sender ID (default `Spark`) |
 | `TWILIO_ACCOUNT_SID` | Twilio account SID |
 | `TWILIO_AUTH_TOKEN` | Twilio auth token |
 | `TWILIO_PHONE_NUMBER` | Twilio sender number (E.164) |

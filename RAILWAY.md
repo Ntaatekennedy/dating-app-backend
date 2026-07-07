@@ -30,6 +30,13 @@ Deploy from the [Railway dashboard](https://railway.com/dashboard) or the CLI.
    |----------|--------|
    | `JWT_SECRET` | A long random string |
    | `NODE_ENV` | `production` |
+   | `SMS_PROVIDER` | `africas_talking` or `twilio` |
+   | `OTP_TTL_MINUTES` | `5` |
+   | `AFRICAS_TALKING_USERNAME` | Your AT app username (sandbox or live) |
+   | `AFRICAS_TALKING_API_KEY` | Your AT API key |
+   | `AFRICAS_TALKING_SENDER_ID` | `Spark` (or your approved sender ID) |
+
+   **Twilio alternative:** set `SMS_PROVIDER=twilio` and add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`.
 
    `BASE_URL` is optional — Railway’s public domain is used automatically.
 
