@@ -104,6 +104,28 @@ function buildDiscoverResults({ myProfile, prefs, rows, excludeSwipedIds, baseUr
   return poolResults;
 }
 
+async function getMatchedPartnerIds(meId) {
+  const [rows] = await pool.query(
+    `SELECT user1_id, user2_id FROM matches
+     WHERE is_active = TRUE AND (user1_id = ? OR user2_id = ?)`,
+    [meId, meId],
+  );
+  const ids = new Set();
+  for (const row of rows) {
+    ids.add(row.user1_id === meId ? row.user2_id : row.user1_id);
+  }
+  return ids;
+}
+
+async function userHasActiveMatch(meId, otherUserId) {
+  const [u1, u2] = orderedPair(meId, otherUserId);
+  const [rows] = await pool.query(
+    'SELECT id FROM matches WHERE is_active = TRUE AND user1_id = ? AND user2_id = ?',
+    [u1, u2],
+  );
+  return rows.length > 0;
+}
+
 router.get('/', authRequired, async (req, res) => {
   try {
     const meId = req.user.userId;
@@ -153,6 +175,18 @@ router.get('/', authRequired, async (req, res) => {
       });
     }
 
+    // Still empty — show everyone again except current matches.
+    if (results.length === 0) {
+      const matchedIds = await getMatchedPartnerIds(meId);
+      results = buildDiscoverResults({
+        myProfile,
+        prefs,
+        rows: filteredRows,
+        excludeSwipedIds: matchedIds,
+        baseUrl,
+      });
+    }
+
     const userIds = results.map((r) => r._userId);
     const interestMap = new Map();
     if (userIds.length) {
@@ -196,7 +230,11 @@ router.post('/swipe', authRequired, async (req, res) => {
       [meId, swipedUserId],
     );
     if (existing.length) {
-      if (existing[0].action === 'pass' && action !== 'pass') {
+      const alreadyMatched = await userHasActiveMatch(meId, swipedUserId);
+      if (alreadyMatched) {
+        return res.status(409).json({ error: 'Already matched with this user' });
+      }
+      if (existing[0].action !== action) {
         await pool.query(
           'UPDATE swipes SET action = ? WHERE swiper_id = ? AND swiped_id = ?',
           [action, meId, swipedUserId],
