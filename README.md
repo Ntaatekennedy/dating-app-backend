@@ -34,25 +34,19 @@ API base URL: `http://localhost:3000`
 
 ## Demo sign-in
 
-**Phone OTP (sign in only):**
-- Phone: `+256700100001`
-- `POST /api/auth/send-otp` sends an SMS to the phone (Twilio required)
-- `POST /api/auth/verify-otp-login` with `{ "phone", "code" }` completes sign in
-
-**Sign up:** no OTP — `POST /api/auth/register` with `phone` and profile fields.
-
-**Legacy email login:**
 - Email: `demo@dating.app`
 - Password: `password123`
+
+Phone OTP routes (`/send-otp`, `/verify-otp-login`) remain available for optional SMS login.
 
 ## API overview
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/auth/send-otp` | Send login OTP via SMS (`purpose` must be `login`) |
-| POST | `/api/auth/verify-otp-login` | Verify OTP and sign in |
-| POST | `/api/auth/register` | Create account with `phone` (no OTP) |
-| POST | `/api/auth/login` | Legacy email/password login |
+| POST | `/api/auth/register` | Create account with `email`, `password`, and profile fields |
+| POST | `/api/auth/login` | Email/password login |
+| POST | `/api/auth/send-otp` | Send login OTP via SMS (optional) |
+| POST | `/api/auth/verify-otp-login` | Verify OTP and sign in (optional) |
 | GET | `/api/auth/me` | Current user + profile |
 | GET | `/api/discover` | Discover profiles |
 | POST | `/api/discover/swipe` | Swipe on a user |
@@ -69,7 +63,7 @@ API base URL: `http://localhost:3000`
 | GET | `/api/subscriptions/status` | Chat/phone access status |
 | POST | `/api/subscriptions/purchase` | Buy subscription |
 | GET | `/api/users/:id/public` | Public profile |
-| GET | `/api/users/:id/phone` | Phone number (subscription) |
+| GET | `/api/users/:id/phone` | Phone number (masked without subscription) |
 | POST | `/api/users/:id/block` | Block user |
 | POST | `/api/users/:id/report` | Report user |
 

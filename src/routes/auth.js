@@ -115,7 +115,8 @@ router.post('/verify-otp-login', async (req, res) => {
 router.post('/register', async (req, res) => {
   try {
     const {
-      phone,
+      email,
+      password,
       displayName,
       dateOfBirth,
       gender,
@@ -123,14 +124,13 @@ router.post('/register', async (req, res) => {
       profileInput = {},
     } = req.body;
 
-    const normalizedPhone = normalizePhone(phone);
-    if (!normalizedPhone || !displayName || !dateOfBirth || !gender || !interestedIn?.length) {
+    if (!email || !password || !displayName || !dateOfBirth || !gender || !interestedIn?.length) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const [existing] = await pool.query('SELECT id FROM users WHERE phone = ?', [normalizedPhone]);
+    const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length) {
-      return res.status(409).json({ error: 'Phone number already registered' });
+      return res.status(409).json({ error: 'Email already registered' });
     }
 
     const userId = uuidv4();
@@ -138,6 +138,7 @@ router.post('/register', async (req, res) => {
     const prefId = uuidv4();
     const photoId = uuidv4();
     const subId = uuidv4();
+    const hash = await bcrypt.hash(password, 10);
 
     const conn = await pool.getConnection();
     try {
@@ -145,8 +146,8 @@ router.post('/register', async (req, res) => {
 
       await conn.query(
         `INSERT INTO users (id, email, phone, password_hash, is_verified)
-         VALUES (?, NULL, ?, NULL, FALSE)`,
-        [userId, normalizedPhone],
+         VALUES (?, ?, ?, ?, FALSE)`,
+        [userId, email, profileInput.phone || null, hash],
       );
 
       await conn.query(

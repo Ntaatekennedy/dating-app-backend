@@ -13,9 +13,11 @@ Your workspace ID (from your URL):
 
 1. Go to **Settings** → **Security** → **Access Keys**
 2. Create a key with **Application Developer** role (SMS send permission)
-3. Copy the access key (shown once)
+3. Copy the access key (shown once) — EU keys start with `bk_eu1_`
 
-Docs: [Bird authentication](https://bird.com/en-gb/docs/guides/authentication)
+The server auto-uses `https://eu1.platform.bird.com/v1` for `bk_eu1_` keys.
+
+Docs: [Bird authentication](https://bird.com/en-gb/docs/guides/authentication) · [Regions](https://bird.com/en-it/docs/api/regions)
 
 ### SMS channel or navigator
 

@@ -44,10 +44,26 @@ function orderedPair(idA, idB) {
   return idA < idB ? [idA, idB] : [idB, idA];
 }
 
+function maskPhone(phone) {
+  if (!phone?.trim()) return null;
+  const trimmed = phone.trim();
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length < 4) return '*'.repeat(digits.length);
+
+  const prefixLen = trimmed.startsWith('+') ? 4 : 2;
+  const prefix = trimmed.slice(0, Math.min(prefixLen, trimmed.length));
+  const suffix = digits.slice(-3);
+  const prefixDigits = prefix.replace(/\D/g, '').length;
+  const hiddenCount = Math.max(digits.length - prefixDigits - 3, 3);
+  const stars = '*'.repeat(hiddenCount);
+  return `${prefix} ${stars} ${suffix}`;
+}
+
 module.exports = {
   haversineKm,
   calculateAge,
   verifyPassword,
   planDurationDays,
   orderedPair,
+  maskPhone,
 };

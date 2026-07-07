@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const pool = require('../config/db');
 const { authRequired } = require('../middleware/auth');
 const { mapProfile, mapPhoto } = require('../utils/mappers');
+const { maskPhone } = require('../utils/helpers');
 const { resolveBaseUrl } = require('../utils/baseUrl');
 
 const router = express.Router();
@@ -55,16 +56,20 @@ router.get('/:userId/phone', authRequired, async (req, res) => {
   try {
     const requesterId = req.user.userId;
     const { userId } = req.params;
-
     const sub = await getActiveSubscription(requesterId);
-    if (!sub) {
-      return res.status(403).json({ error: 'Subscribe to view phone numbers' });
-    }
 
     const [[user]] = await pool.query('SELECT phone FROM users WHERE id = ?', [userId]);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    res.json({ phone: user.phone });
+    if (!user.phone) {
+      return res.json({ phone: null, masked: true });
+    }
+
+    if (!sub) {
+      return res.json({ phone: maskPhone(user.phone), masked: true });
+    }
+
+    res.json({ phone: user.phone, masked: false });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load phone number' });
