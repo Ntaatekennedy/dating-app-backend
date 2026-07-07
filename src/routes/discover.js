@@ -36,13 +36,27 @@ async function loadDiscoverCandidates(meId) {
   return { myProfile, prefs, rows: profiles };
 }
 
+function discoverGendersForViewer(viewerGender, prefsShowMe) {
+  if (viewerGender === 'female') return ['male'];
+  if (viewerGender === 'male') return ['female'];
+  return prefsShowMe;
+}
+
+function canDiscoverProfile(myProfile, prefs, candidateRow) {
+  const showMe = parseJsonArray(prefs.show_me);
+  const allowedGenders = discoverGendersForViewer(myProfile.gender, showMe);
+  if (!allowedGenders.includes(candidateRow.gender)) return false;
+  const theirInterested = parseJsonArray(candidateRow.interested_in);
+  return theirInterested.includes(myProfile.gender);
+}
+
 function buildDiscoverResults({ myProfile, prefs, rows, excludeSwipedIds, baseUrl }) {
   const showMe = parseJsonArray(prefs.show_me);
   const withinRange = [];
   const outsideRange = [];
 
   for (const row of rows) {
-    if (!showMe.includes(row.gender)) continue;
+    if (!canDiscoverProfile(myProfile, prefs, row)) continue;
     if (excludeSwipedIds.has(row.user_id)) continue;
 
     const age = calculateAge(row.date_of_birth);

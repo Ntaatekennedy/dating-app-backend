@@ -1,3 +1,16 @@
+-- ============================================================
+-- Dating App — MySQL 8.0+ (schema + sample data)
+-- Compatible with MySQL Workbench
+-- Run this single file to create the database, tables, and demo data.
+-- ============================================================
+
+DROP DATABASE IF EXISTS dating_app;
+
+CREATE DATABASE dating_app
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
+
+USE dating_app;
 
 -- ============================================================
 -- TABLES
@@ -16,6 +29,7 @@ CREATE TABLE users (
     updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- 1b. PHONE OTPs (sign-in / sign-up verification)
 CREATE TABLE phone_otps (
     id              CHAR(36)        PRIMARY KEY,
     phone           VARCHAR(20)     NOT NULL,
@@ -26,6 +40,18 @@ CREATE TABLE phone_otps (
     created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_phone_otps_phone_purpose (phone, purpose),
     INDEX idx_phone_otps_expires (expires_at)
+) ENGINE=InnoDB;
+
+-- 1c. PASSWORD RESET CODES
+CREATE TABLE password_reset_codes (
+    id              CHAR(36)        PRIMARY KEY,
+    email           VARCHAR(255)    NOT NULL,
+    code            VARCHAR(6)      NOT NULL,
+    expires_at      TIMESTAMP       NOT NULL,
+    used_at         TIMESTAMP       NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_password_reset_email (email),
+    INDEX idx_password_reset_expires (expires_at)
 ) ENGINE=InnoDB;
 
 -- 2. PROFILES
@@ -214,6 +240,34 @@ CREATE TABLE user_interests (
 ) ENGINE=InnoDB;
 
 -- ============================================================
+-- TRIGGER — auto-create match on mutual like
+-- ============================================================
+DELIMITER $$
+
+CREATE TRIGGER trg_create_match
+AFTER INSERT ON swipes
+FOR EACH ROW
+BEGIN
+    IF NEW.action IN ('like', 'super_like') THEN
+        IF EXISTS (
+            SELECT 1 FROM swipes
+            WHERE swiper_id = NEW.swiped_id
+              AND swiped_id = NEW.swiper_id
+              AND action IN ('like', 'super_like')
+        ) THEN
+            INSERT IGNORE INTO matches (id, user1_id, user2_id)
+            VALUES (
+                UUID(),
+                LEAST(NEW.swiper_id, NEW.swiped_id),
+                GREATEST(NEW.swiper_id, NEW.swiped_id)
+            );
+        END IF;
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- ============================================================
 -- SAMPLE DATA (matches Flutter mock users)
 -- Demo password: password123 (plain text for local dev only)
 -- ============================================================
@@ -228,7 +282,13 @@ INSERT INTO users (id, email, phone, password_hash, is_verified, last_active_at)
     ('user-002', 'sophia@example.com', '+256700100003', 'password123', TRUE, NOW()),
     ('user-003', 'mia@example.com', '+256700100004', 'password123', TRUE, NOW()),
     ('user-004', 'olivia@example.com', '+256700100005', 'password123', TRUE, NOW()),
-    ('user-005', 'ava@example.com', '+256700100006', 'password123', TRUE, NOW());
+    ('user-005', 'ava@example.com', '+256700100006', 'password123', TRUE, NOW()),
+    ('user-006', 'james@example.com', '+256700100007', 'password123', TRUE, NOW()),
+    ('user-007', 'zara@example.com', '+256700100008', 'password123', TRUE, NOW()),
+    ('user-008', 'daniel@example.com', '+256700100009', 'password123', TRUE, DATE_SUB(NOW(), INTERVAL 2 DAY)),
+    ('user-009', 'lily@example.com', '+256700100010', 'password123', TRUE, DATE_SUB(NOW(), INTERVAL 5 MINUTE)),
+    ('user-010', 'noah@example.com', '+256700100011', 'password123', TRUE, NOW()),
+    ('user-011', 'chloe@example.com', '+256700100012', 'password123', TRUE, DATE_SUB(NOW(), INTERVAL 1 HOUR));
 
 INSERT INTO profiles (id, user_id, display_name, bio, date_of_birth, gender, interested_in,
     height_cm, job_title, education, latitude, longitude, city, country, relationship_type) VALUES
@@ -255,7 +315,31 @@ INSERT INTO profiles (id, user_id, display_name, bio, date_of_birth, gender, int
     ('profile-user-005', 'user-005', 'Ava',
      'Photographer capturing moments and making memories.',
      '1998-09-05', 'non_binary', '["male", "female", "non_binary"]',
-     170, 'Photographer', 'BA Visual Arts', 41.01, 28.97, 'Istanbul', 'Turkey', 'making_friends');
+     170, 'Photographer', 'BA Visual Arts', 41.01, 28.97, 'Istanbul', 'Turkey', 'making_friends'),
+    ('profile-user-006', 'user-006', 'James',
+     'Startup founder who loves live music and rooftop sunsets.',
+     '1993-04-18', 'male', '["female"]',
+     178, 'Entrepreneur', 'MBA', 0.3476, 32.5825, 'Kampala', 'Uganda', 'long_term'),
+    ('profile-user-007', 'user-007', 'Zara',
+     'Nurse by day, dancer by night. Good vibes only.',
+     '1996-12-02', 'female', '["male"]',
+     165, 'Registered Nurse', 'BSc Nursing', 0.0564, 32.4637, 'Entebbe', 'Uganda', 'short_term'),
+    ('profile-user-008', 'user-008', 'Daniel',
+     'Cyclist, coffee nerd, and amateur chef.',
+     '1991-08-25', 'male', '["female", "non_binary"]',
+     182, 'Product Manager', 'BSc Information Systems', 0.4244, 33.2042, 'Jinja', 'Uganda', 'making_friends'),
+    ('profile-user-009', 'user-009', 'Lily',
+     'Fashion stylist with a soft spot for vintage markets.',
+     '2000-02-14', 'female', '["male"]',
+     168, 'Fashion Stylist', 'Diploma Fashion Design', 0.3510, 32.5900, 'Kampala', 'Uganda', 'just_fun'),
+    ('profile-user-010', 'user-010', 'Noah',
+     'Personal trainer helping people crush their goals.',
+     '1994-06-09', 'male', '["female"]',
+     185, 'Personal Trainer', 'Certified Fitness Coach', 0.3400, 32.5750, 'Kampala', 'Uganda', 'short_term'),
+    ('profile-user-011', 'user-011', 'Chloe',
+     'Teacher, book club host, and weekend brunch enthusiast.',
+     '1997-10-21', 'female', '["male", "non_binary"]',
+     172, 'High School Teacher', 'BA Education', -0.6100, 30.6580, 'Mbarara', 'Uganda', 'long_term');
 
 INSERT INTO photos (id, user_id, url, sort_order, is_approved) VALUES
     ('photo-user-demo-me', 'user-demo-me', 'https://picsum.photos/seed/alex/600/800', 0, TRUE),
@@ -263,7 +347,15 @@ INSERT INTO photos (id, user_id, url, sort_order, is_approved) VALUES
     ('photo-user-002', 'user-002', 'https://picsum.photos/seed/sophia/600/800', 0, TRUE),
     ('photo-user-003', 'user-003', 'https://picsum.photos/seed/mia/600/800', 0, TRUE),
     ('photo-user-004', 'user-004', 'https://picsum.photos/seed/olivia/600/800', 0, TRUE),
-    ('photo-user-005', 'user-005', 'https://picsum.photos/seed/ava/600/800', 0, TRUE);
+    ('photo-user-005', 'user-005', 'https://picsum.photos/seed/ava/600/800', 0, TRUE),
+    ('photo-user-006', 'user-006', 'https://picsum.photos/seed/james/600/800', 0, TRUE),
+    ('photo-user-006b', 'user-006', 'https://picsum.photos/seed/james2/600/800', 1, TRUE),
+    ('photo-user-007', 'user-007', 'https://picsum.photos/seed/zara/600/800', 0, TRUE),
+    ('photo-user-008', 'user-008', 'https://picsum.photos/seed/daniel/600/800', 0, TRUE),
+    ('photo-user-009', 'user-009', 'https://picsum.photos/seed/lily/600/800', 0, TRUE),
+    ('photo-user-009b', 'user-009', 'https://picsum.photos/seed/lily2/600/800', 1, TRUE),
+    ('photo-user-010', 'user-010', 'https://picsum.photos/seed/noah/600/800', 0, TRUE),
+    ('photo-user-011', 'user-011', 'https://picsum.photos/seed/chloe/600/800', 0, TRUE);
 
 INSERT INTO preferences (id, user_id, min_age, max_age, max_distance_km, show_me) VALUES
     ('pref-user-demo-me', 'user-demo-me', 18, 99, 50, '["female", "non_binary"]'),
@@ -271,7 +363,13 @@ INSERT INTO preferences (id, user_id, min_age, max_age, max_distance_km, show_me
     ('pref-user-002', 'user-002', 18, 99, 50, '["male", "non_binary"]'),
     ('pref-user-003', 'user-003', 18, 99, 50, '["male"]'),
     ('pref-user-004', 'user-004', 18, 99, 50, '["male"]'),
-    ('pref-user-005', 'user-005', 18, 99, 50, '["male", "female", "non_binary"]');
+    ('pref-user-005', 'user-005', 18, 99, 50, '["male", "female", "non_binary"]'),
+    ('pref-user-006', 'user-006', 22, 35, 80, '["female"]'),
+    ('pref-user-007', 'user-007', 24, 40, 60, '["male"]'),
+    ('pref-user-008', 'user-008', 21, 38, 100, '["female", "non_binary"]'),
+    ('pref-user-009', 'user-009', 20, 32, 50, '["male"]'),
+    ('pref-user-010', 'user-010', 22, 36, 70, '["female"]'),
+    ('pref-user-011', 'user-011', 23, 40, 90, '["male", "non_binary"]');
 
 INSERT INTO subscriptions (id, user_id, plan, is_active) VALUES
     ('sub-user-demo-me', 'user-demo-me', 'free', TRUE),
@@ -279,7 +377,13 @@ INSERT INTO subscriptions (id, user_id, plan, is_active) VALUES
     ('sub-user-002', 'user-002', 'free', TRUE),
     ('sub-user-003', 'user-003', 'free', TRUE),
     ('sub-user-004', 'user-004', 'free', TRUE),
-    ('sub-user-005', 'user-005', 'free', TRUE);
+    ('sub-user-005', 'user-005', 'free', TRUE),
+    ('sub-user-006', 'user-006', 'free', TRUE),
+    ('sub-user-007', 'user-007', 'free', TRUE),
+    ('sub-user-008', 'user-008', 'free', TRUE),
+    ('sub-user-009', 'user-009', 'free', TRUE),
+    ('sub-user-010', 'user-010', 'free', TRUE),
+    ('sub-user-011', 'user-011', 'free', TRUE);
 
 INSERT INTO user_interests (user_id, interest_id) VALUES
     ('user-demo-me', 1), ('user-demo-me', 3), ('user-demo-me', 7),
@@ -287,7 +391,13 @@ INSERT INTO user_interests (user_id, interest_id) VALUES
     ('user-002', 3), ('user-002', 4), ('user-002', 7),
     ('user-003', 2), ('user-003', 6), ('user-003', 8),
     ('user-004', 4), ('user-004', 1), ('user-004', 6),
-    ('user-005', 5), ('user-005', 1), ('user-005', 2);
+    ('user-005', 5), ('user-005', 1), ('user-005', 2),
+    ('user-006', 2), ('user-006', 6), ('user-006', 1),
+    ('user-007', 3), ('user-007', 2), ('user-007', 4),
+    ('user-008', 4), ('user-008', 7), ('user-008', 8),
+    ('user-009', 5), ('user-009', 1), ('user-009', 6),
+    ('user-010', 3), ('user-010', 4), ('user-010', 7),
+    ('user-011', 8), ('user-011', 6), ('user-011', 2);
 
 INSERT INTO matches (id, user1_id, user2_id, matched_at) VALUES
     ('match-001', 'user-001', 'user-demo-me', DATE_SUB(NOW(), INTERVAL 2 DAY));
