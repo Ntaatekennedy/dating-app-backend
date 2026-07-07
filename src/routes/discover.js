@@ -4,24 +4,109 @@ const pool = require('../config/db');
 const { authRequired } = require('../middleware/auth');
 const { haversineKm, calculateAge, orderedPair } = require('../utils/helpers');
 const { mapProfile, mapMatch, parseJsonArray } = require('../utils/mappers');
+const { resolveBaseUrl } = require('../utils/baseUrl');
 
 const router = express.Router();
+
+function resolvePhotoUrl(baseUrl, userId, rawUrl) {
+  if (!rawUrl) return `https://picsum.photos/seed/${userId}/600/800`;
+  if (rawUrl.startsWith('http')) return rawUrl;
+  return `${baseUrl}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+}
+
+async function loadDiscoverCandidates(meId) {
+  const [[myProfile]] = await pool.query('SELECT * FROM profiles WHERE user_id = ?', [meId]);
+  const [[prefs]] = await pool.query('SELECT * FROM preferences WHERE user_id = ?', [meId]);
+  if (!myProfile || !prefs) return { myProfile: null, prefs: null, rows: [] };
+
+  const [profiles] = await pool.query(
+    `SELECT p.*, ph.url AS primary_photo_url, u.last_active_at
+     FROM profiles p
+     JOIN users u ON u.id = p.user_id
+     LEFT JOIN photos ph ON ph.id = (
+       SELECT id FROM photos
+       WHERE user_id = p.user_id
+       ORDER BY sort_order ASC
+       LIMIT 1
+     )
+     WHERE p.user_id != ? AND p.is_visible = TRUE`,
+    [meId],
+  );
+
+  return { myProfile, prefs, rows: profiles };
+}
+
+function buildDiscoverResults({ myProfile, prefs, rows, excludeSwipedIds, baseUrl }) {
+  const showMe = parseJsonArray(prefs.show_me);
+  const withinRange = [];
+  const outsideRange = [];
+
+  for (const row of rows) {
+    if (!showMe.includes(row.gender)) continue;
+    if (excludeSwipedIds.has(row.user_id)) continue;
+
+    const age = calculateAge(row.date_of_birth);
+    if (age < prefs.min_age || age > prefs.max_age) continue;
+
+    let distanceKm = null;
+    if (
+      myProfile.latitude != null &&
+      myProfile.longitude != null &&
+      row.latitude != null &&
+      row.longitude != null
+    ) {
+      distanceKm = haversineKm(
+        Number(myProfile.latitude),
+        Number(myProfile.longitude),
+        Number(row.latitude),
+        Number(row.longitude),
+      );
+    }
+
+    const entry = {
+      profile: mapProfile(row),
+      primaryPhotoUrl: resolvePhotoUrl(baseUrl, row.user_id, row.primary_photo_url),
+      distanceKm,
+      interests: [],
+      lastActiveAt: row.last_active_at,
+      _userId: row.user_id,
+    };
+
+    if (distanceKm != null && distanceKm > prefs.max_distance_km) {
+      outsideRange.push(entry);
+    } else {
+      withinRange.push(entry);
+    }
+  }
+
+  const poolResults = withinRange.length > 0 ? withinRange : outsideRange;
+  poolResults.sort((a, b) => {
+    const da = a.distanceKm ?? 99999;
+    const db = b.distanceKm ?? 99999;
+    if (da !== db) return da - db;
+    return new Date(b.profile.updatedAt) - new Date(a.profile.updatedAt);
+  });
+
+  return poolResults;
+}
 
 router.get('/', authRequired, async (req, res) => {
   try {
     const meId = req.user.userId;
-
-    const [[myProfile]] = await pool.query('SELECT * FROM profiles WHERE user_id = ?', [meId]);
-    const [[prefs]] = await pool.query('SELECT * FROM preferences WHERE user_id = ?', [meId]);
+    const baseUrl = resolveBaseUrl();
+    const { myProfile, prefs, rows } = await loadDiscoverCandidates(meId);
     if (!myProfile || !prefs) return res.json([]);
 
-    const showMe = parseJsonArray(prefs.show_me);
-
     const [swiped] = await pool.query(
-      'SELECT swiped_id FROM swipes WHERE swiper_id = ?',
+      'SELECT swiped_id, action FROM swipes WHERE swiper_id = ?',
       [meId],
     );
-    const swipedIds = new Set(swiped.map((r) => r.swiped_id));
+    const allSwipedIds = new Set(swiped.map((r) => r.swiped_id));
+    const likedSwipedIds = new Set(
+      swiped
+        .filter((r) => r.action === 'like' || r.action === 'super_like')
+        .map((r) => r.swiped_id),
+    );
 
     const [blocks] = await pool.query(
       `SELECT blocker_id, blocked_id FROM blocks
@@ -33,59 +118,50 @@ router.get('/', authRequired, async (req, res) => {
       blockedIds.add(b.blocker_id === meId ? b.blocked_id : b.blocker_id);
     }
 
-    const [profiles] = await pool.query(
-      `SELECT p.*, ph.url AS primary_photo_url, u.last_active_at
-       FROM profiles p
-       JOIN photos ph ON ph.user_id = p.user_id AND ph.sort_order = 0
-       JOIN users u ON u.id = p.user_id
-       WHERE p.user_id != ? AND p.is_visible = TRUE`,
-      [meId],
-    );
+    const filteredRows = rows.filter((row) => !blockedIds.has(row.user_id));
 
-    const results = [];
+    let results = buildDiscoverResults({
+      myProfile,
+      prefs,
+      rows: filteredRows,
+      excludeSwipedIds: allSwipedIds,
+      baseUrl,
+    });
 
-    for (const row of profiles) {
-      if (!showMe.includes(row.gender)) continue;
-      if (swipedIds.has(row.user_id)) continue;
-      if (blockedIds.has(row.user_id)) continue;
-
-      const age = calculateAge(row.date_of_birth);
-      if (age < prefs.min_age || age > prefs.max_age) continue;
-
-      let distanceKm = null;
-      if (
-        myProfile.latitude != null &&
-        myProfile.longitude != null &&
-        row.latitude != null &&
-        row.longitude != null
-      ) {
-        distanceKm = haversineKm(
-          Number(myProfile.latitude),
-          Number(myProfile.longitude),
-          Number(row.latitude),
-          Number(row.longitude),
-        );
-        if (distanceKm > prefs.max_distance_km) continue;
-      }
-
-      const [interestRows] = await pool.query(
-        `SELECT i.name FROM user_interests ui
-         JOIN interests i ON i.id = ui.interest_id
-         WHERE ui.user_id = ?`,
-        [row.user_id],
-      );
-
-      results.push({
-        profile: mapProfile(row),
-        primaryPhotoUrl: row.primary_photo_url,
-        distanceKm,
-        interests: interestRows.map((i) => i.name),
-        lastActiveAt: row.last_active_at,
+    // When the deck is empty, bring back profiles the user passed on.
+    if (results.length === 0 && likedSwipedIds.size < allSwipedIds.size) {
+      results = buildDiscoverResults({
+        myProfile,
+        prefs,
+        rows: filteredRows,
+        excludeSwipedIds: likedSwipedIds,
+        baseUrl,
       });
     }
 
-    results.sort((a, b) => new Date(b.profile.updatedAt) - new Date(a.profile.updatedAt));
-    res.json(results.slice(0, 20));
+    const userIds = results.map((r) => r._userId);
+    const interestMap = new Map();
+    if (userIds.length) {
+      const placeholders = userIds.map(() => '?').join(',');
+      const [interestRows] = await pool.query(
+        `SELECT ui.user_id, i.name
+         FROM user_interests ui
+         JOIN interests i ON i.id = ui.interest_id
+         WHERE ui.user_id IN (${placeholders})`,
+        userIds,
+      );
+      for (const row of interestRows) {
+        if (!interestMap.has(row.user_id)) interestMap.set(row.user_id, []);
+        interestMap.get(row.user_id).push(row.name);
+      }
+    }
+
+    const payload = results.slice(0, 20).map(({ _userId, ...rest }) => ({
+      ...rest,
+      interests: interestMap.get(_userId) || [],
+    }));
+
+    res.json(payload);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load discover profiles' });
@@ -102,17 +178,24 @@ router.post('/swipe', authRequired, async (req, res) => {
     }
 
     const [existing] = await pool.query(
-      'SELECT id FROM swipes WHERE swiper_id = ? AND swiped_id = ?',
+      'SELECT id, action FROM swipes WHERE swiper_id = ? AND swiped_id = ?',
       [meId, swipedUserId],
     );
     if (existing.length) {
-      return res.status(409).json({ error: 'Already swiped on this user' });
+      if (existing[0].action === 'pass' && action !== 'pass') {
+        await pool.query(
+          'UPDATE swipes SET action = ? WHERE swiper_id = ? AND swiped_id = ?',
+          [action, meId, swipedUserId],
+        );
+      } else {
+        return res.status(409).json({ error: 'Already swiped on this user' });
+      }
+    } else {
+      await pool.query(
+        'INSERT INTO swipes (id, swiper_id, swiped_id, action) VALUES (?, ?, ?, ?)',
+        [uuidv4(), meId, swipedUserId, action],
+      );
     }
-
-    await pool.query(
-      'INSERT INTO swipes (id, swiper_id, swiped_id, action) VALUES (?, ?, ?, ?)',
-      [uuidv4(), meId, swipedUserId, action],
-    );
 
     if (action === 'pass') {
       return res.json({ isMatch: false, match: null });
