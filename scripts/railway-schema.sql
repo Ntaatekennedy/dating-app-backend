@@ -358,18 +358,18 @@ INSERT INTO photos (id, user_id, url, sort_order, is_approved) VALUES
     ('photo-user-011', 'user-011', 'https://picsum.photos/seed/chloe/600/800', 0, TRUE);
 
 INSERT INTO preferences (id, user_id, min_age, max_age, max_distance_km, show_me) VALUES
-    ('pref-user-demo-me', 'user-demo-me', 18, 99, 50, '["female", "non_binary"]'),
-    ('pref-user-001', 'user-001', 18, 99, 50, '["male"]'),
-    ('pref-user-002', 'user-002', 18, 99, 50, '["male", "non_binary"]'),
-    ('pref-user-003', 'user-003', 18, 99, 50, '["male"]'),
-    ('pref-user-004', 'user-004', 18, 99, 50, '["male"]'),
+    ('pref-user-demo-me', 'user-demo-me', 18, 99, 50, '["male", "female", "non_binary"]'),
+    ('pref-user-001', 'user-001', 18, 99, 50, '["male", "female", "non_binary"]'),
+    ('pref-user-002', 'user-002', 18, 99, 50, '["male", "female", "non_binary"]'),
+    ('pref-user-003', 'user-003', 18, 99, 50, '["male", "female", "non_binary"]'),
+    ('pref-user-004', 'user-004', 18, 99, 50, '["male", "female", "non_binary"]'),
     ('pref-user-005', 'user-005', 18, 99, 50, '["male", "female", "non_binary"]'),
-    ('pref-user-006', 'user-006', 22, 35, 80, '["female"]'),
-    ('pref-user-007', 'user-007', 24, 40, 60, '["male"]'),
-    ('pref-user-008', 'user-008', 21, 38, 100, '["female", "non_binary"]'),
-    ('pref-user-009', 'user-009', 20, 32, 50, '["male"]'),
-    ('pref-user-010', 'user-010', 22, 36, 70, '["female"]'),
-    ('pref-user-011', 'user-011', 23, 40, 90, '["male", "non_binary"]');
+    ('pref-user-006', 'user-006', 22, 35, 80, '["male", "female", "non_binary"]'),
+    ('pref-user-007', 'user-007', 24, 40, 60, '["male", "female", "non_binary"]'),
+    ('pref-user-008', 'user-008', 21, 38, 100, '["male", "female", "non_binary"]'),
+    ('pref-user-009', 'user-009', 20, 32, 50, '["male", "female", "non_binary"]'),
+    ('pref-user-010', 'user-010', 22, 36, 70, '["male", "female", "non_binary"]'),
+    ('pref-user-011', 'user-011', 23, 40, 90, '["male", "female", "non_binary"]');
 
 INSERT INTO subscriptions (id, user_id, plan, is_active) VALUES
     ('sub-user-demo-me', 'user-demo-me', 'free', TRUE),

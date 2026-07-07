@@ -174,7 +174,7 @@ router.post('/register', async (req, res) => {
 
       await conn.query(
         `INSERT INTO preferences (id, user_id, show_me) VALUES (?, ?, ?)`,
-        [prefId, userId, JSON.stringify(interestedIn)],
+        [prefId, userId, JSON.stringify(['male', 'female', 'non_binary'])],
       );
 
       await conn.query(

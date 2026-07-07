@@ -36,9 +36,7 @@ async function loadDiscoverCandidates(meId) {
   return { myProfile, prefs, rows: profiles };
 }
 
-function discoverGendersForViewer(viewerGender, prefsShowMe) {
-  if (viewerGender === 'female') return ['male'];
-  if (viewerGender === 'male') return ['female'];
+function discoverGendersForViewer(_viewerGender, prefsShowMe) {
   return prefsShowMe;
 }
 
