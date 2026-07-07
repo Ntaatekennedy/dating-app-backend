@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const pool = require('../config/db');
 const { authRequired } = require('../middleware/auth');
 const { mapProfile, mapPhoto } = require('../utils/mappers');
+const { resolveBaseUrl } = require('../utils/baseUrl');
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ router.get('/:userId/public', authRequired, async (req, res) => {
     const [[profile]] = await pool.query('SELECT * FROM profiles WHERE user_id = ?', [userId]);
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
 
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    const baseUrl = resolveBaseUrl();
     const [photos] = await pool.query(
       'SELECT * FROM photos WHERE user_id = ? ORDER BY sort_order ASC LIMIT 1',
       [userId],

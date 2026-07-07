@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const pool = require('../config/db');
 const { authRequired } = require('../middleware/auth');
 const { mapProfile, mapPreferences, mapPhoto, mapInterest } = require('../utils/mappers');
+const { resolveBaseUrl } = require('../utils/baseUrl');
 
 const router = express.Router();
 
@@ -125,7 +126,7 @@ router.put('/phone', authRequired, async (req, res) => {
 
 router.get('/photos/:userId', authRequired, async (req, res) => {
   try {
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    const baseUrl = resolveBaseUrl();
     const [rows] = await pool.query(
       'SELECT * FROM photos WHERE user_id = ? ORDER BY sort_order ASC',
       [req.params.userId],
@@ -140,7 +141,7 @@ router.get('/photos/:userId', authRequired, async (req, res) => {
 router.post('/photo', authRequired, upload.single('photo'), async (req, res) => {
   try {
     const userId = req.user.userId;
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    const baseUrl = resolveBaseUrl();
     let url = req.body?.url;
 
     if (req.file) {
