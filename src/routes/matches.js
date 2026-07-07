@@ -5,6 +5,7 @@ const { authRequired } = require('../middleware/auth');
 const { mapProfile, mapMatch, mapMessage } = require('../utils/mappers');
 const { orderedPair } = require('../utils/helpers');
 const { resolveBaseUrl } = require('../utils/baseUrl');
+const { setTyping, isUserTyping } = require('../utils/chatRealtime');
 
 const router = express.Router();
 
@@ -110,6 +111,56 @@ router.get('/', authRequired, async (req, res) => {
   }
 });
 
+router.get('/:matchId/live', authRequired, async (req, res) => {
+  try {
+    const meId = req.user.userId;
+    const { matchId } = req.params;
+    const match = await assertMatchMember(matchId, meId);
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+
+    const otherId = match.user1_id === meId ? match.user2_id : match.user1_id;
+    const after = req.query.after;
+
+    let rows = [];
+    if (after) {
+      [rows] = await pool.query(
+        'SELECT * FROM messages WHERE match_id = ? AND sent_at > ? ORDER BY sent_at ASC',
+        [matchId, after],
+      );
+      if (rows.length > 0) {
+        await pool.query(
+          `UPDATE messages SET is_read = TRUE
+           WHERE match_id = ? AND sender_id != ? AND is_read = FALSE`,
+          [matchId, meId],
+        );
+      }
+    }
+
+    res.json({
+      messages: rows.map(mapMessage),
+      otherUserTyping: isUserTyping(matchId, otherId),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load live chat update' });
+  }
+});
+
+router.post('/:matchId/typing', authRequired, async (req, res) => {
+  try {
+    const meId = req.user.userId;
+    const { matchId } = req.params;
+    const match = await assertMatchMember(matchId, meId);
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+
+    setTyping(matchId, meId, !!req.body.isTyping);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update typing state' });
+  }
+});
+
 router.get('/:matchId/messages', authRequired, async (req, res) => {
   try {
     const meId = req.user.userId;
@@ -139,6 +190,8 @@ router.post('/:matchId/messages', authRequired, async (req, res) => {
 
     const text = (content || '').trim();
     if (!text) return res.status(400).json({ error: 'Message content required' });
+
+    setTyping(matchId, meId, false);
 
     const id = uuidv4();
     await pool.query(

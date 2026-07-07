@@ -53,9 +53,12 @@ Phone OTP routes (`/send-otp`, `/verify-otp-login`) remain available for optiona
 | GET | `/api/auth/me` | Current user + profile |
 | GET | `/api/discover` | Discover profiles (includes `lastActiveAt`) |
 | POST | `/api/discover/swipe` | Swipe on a user |
-| GET | `/api/matches` | List matches (includes `otherLastActiveAt`) |
+| GET | `/api/likes/received` | People who liked you (not yet mutual) |
+| GET | `/api/matches` | List mutual matches (includes `otherLastActiveAt`) |
 | GET | `/api/matches/:id/messages` | Chat messages |
+| GET | `/api/matches/:id/live?after=<iso>` | Live feed: new messages + typing state |
 | POST | `/api/matches/:id/messages` | Send message |
+| POST | `/api/matches/:id/typing` | Set typing indicator (`{ "isTyping": true/false }`) |
 | POST | `/api/matches/:id/read` | Mark messages read |
 | PUT | `/api/profile/profile` | Update profile |
 | PUT | `/api/profile/preferences` | Update preferences |
