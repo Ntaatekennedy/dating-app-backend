@@ -40,12 +40,21 @@ function isProviderConfigured(provider) {
   return false;
 }
 
+function birdApiBase(apiKey) {
+  if (process.env.BIRD_API_BASE) {
+    return process.env.BIRD_API_BASE.replace(/\/$/, '');
+  }
+  if (apiKey?.startsWith('bk_eu1_')) return 'https://eu1.platform.bird.com/v1';
+  if (apiKey?.startsWith('bk_us1_')) return 'https://us1.platform.bird.com/v1';
+  return 'https://api.bird.com';
+}
+
 async function sendBirdSms(phone, code) {
   const workspaceId = process.env.BIRD_WORKSPACE_ID;
   const apiKey = process.env.BIRD_API_KEY;
   const navigatorId = process.env.BIRD_NAVIGATOR_ID;
   const channelId = process.env.BIRD_CHANNEL_ID;
-  const apiBase = process.env.BIRD_API_BASE || 'https://api.bird.com';
+  const apiBase = birdApiBase(apiKey);
 
   const routeType = navigatorId ? 'navigators' : 'channels';
   const routeId = navigatorId || channelId;
