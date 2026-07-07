@@ -1,95 +1,73 @@
-# SMS setup with Twilio (sign-in OTP)
+# SMS setup with Bird (sign-in OTP)
 
 Sign-in sends a 6-digit OTP by SMS. Sign-up does **not** use SMS.
 
-## 1. Get credentials from Twilio Console
+## 1. Bird dashboard setup
 
-Open **[console.twilio.com](https://console.twilio.com/)** and sign in (or create a free account).
+Open your Bird workspace: [bird.com/dashboard](https://bird.com/dashboard)
 
-### Account SID & Auth Token
+Your workspace ID (from your URL):
+`ws_01kwy5m1she1m8a1jm5g7dmqf8`
 
-1. On the **Account Dashboard** home page, find **Account Info**
-2. Copy **Account SID** (starts with `AC…`)
-3. Copy **Auth Token** (click **Show** to reveal it)
+### API key
 
-### Phone number
+1. Go to **Settings** → **Security** → **Access Keys**
+2. Create a key with **Application Developer** role (SMS send permission)
+3. Copy the access key (shown once)
 
-1. Go to **Phone Numbers** → **Manage** → **Active numbers**
-   - Or: [console.twilio.com/us1/develop/phone-numbers/manage/incoming](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming)
-2. If you have no number, click **Buy a number** (trial accounts get a free number)
-3. Copy the number in E.164 format (e.g. `+15551234567`)
+Docs: [Bird authentication](https://bird.com/en-gb/docs/guides/authentication)
 
-### Trial account note
+### SMS channel or navigator
 
-On a **free trial**, SMS only works to **verified** phone numbers:
+You need an SMS-capable number installed as a channel in Bird.
 
-1. Go to **Phone Numbers** → **Manage** → **Verified Caller IDs**
-2. Add and verify the phone numbers you want to test (e.g. your `+256…` number)
+1. Set up **Programmable SMS** in your Bird workspace
+2. Copy either:
+   - **Channel ID** (SMS channel), or
+   - **Navigator ID** (recommended — Bird picks the best SMS route)
 
-## 2. Configure Railway (production API)
+Docs: [Send an SMS message](https://docs.bird.com/api/quickstarts/send-an-sms-message)
 
-[Railway](https://railway.com/dashboard) → project **spark-dating-backend** → service **api** → **Variables**:
+## 2. Railway (production API)
 
-| Variable | Where to get it |
-|----------|-----------------|
-| `SMS_PROVIDER` | `twilio` |
+[Railway](https://railway.com/dashboard) → **spark-dating-backend** → **api** → **Variables**:
+
+| Variable | Value |
+|----------|--------|
+| `SMS_PROVIDER` | `bird` |
 | `OTP_TTL_MINUTES` | `5` |
-| `TWILIO_ACCOUNT_SID` | Twilio Console → Account Info |
-| `TWILIO_AUTH_TOKEN` | Twilio Console → Account Info |
-| `TWILIO_PHONE_NUMBER` | Your Twilio number, e.g. `+15551234567` |
+| `BIRD_WORKSPACE_ID` | `ws_01kwy5m1she1m8a1jm5g7dmqf8` |
+| `BIRD_API_KEY` | Your Bird access key |
+| `BIRD_NAVIGATOR_ID` | Navigator ID (recommended), **or** |
+| `BIRD_CHANNEL_ID` | SMS channel ID |
 
-Save variables, then redeploy **api** (or wait for auto-deploy).
+Redeploy **api** after saving.
 
-## 3. Configure local backend
+## 3. Local backend
 
 Edit `backend/.env`:
 
 ```env
-SMS_PROVIDER=twilio
+SMS_PROVIDER=bird
 OTP_TTL_MINUTES=5
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=your_auth_token
-TWILIO_PHONE_NUMBER=+15551234567
+BIRD_WORKSPACE_ID=ws_01kwy5m1she1m8a1jm5g7dmqf8
+BIRD_API_KEY=your_access_key
+BIRD_NAVIGATOR_ID=your_navigator_id
+# or BIRD_CHANNEL_ID=your_channel_id
 ```
 
-Restart the server: `npm run dev`
+Restart: `npm run dev`
 
-## 4. Railway CLI (optional)
+## 4. Test sign-in
 
-```bash
-cd backend
-railway service link api
-railway variable set SMS_PROVIDER=twilio OTP_TTL_MINUTES=5
-railway variable set TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-railway variable set TWILIO_AUTH_TOKEN=your_auth_token
-railway variable set TWILIO_PHONE_NUMBER=+15551234567
-railway up --service api
-```
+1. Use a phone number registered in the app
+2. Tap **Send verification code**
+3. Check SMS on the phone
+4. Enter code → **Sign In**
 
-## 5. Test sign-in
+If Bird is not fully configured, the server falls back to showing a test code in the app.
 
-1. Use a phone number that exists in your app database (seed: `+256700100001`)
-2. On trial accounts, that number must be **verified** in Twilio Console
-3. In the app: enter phone → **Send verification code** → check SMS on the phone
-4. Enter the code → **Sign In**
+## Alternative providers
 
-If Twilio is not configured, the server falls back to showing a test code in the app (for development only).
-
-## Troubleshooting
-
-| Issue | Fix |
-|-------|-----|
-| `SMS service is not configured` | Set all three `TWILIO_*` variables on Railway |
-| SMS not received (trial) | Verify the destination number in Twilio Console |
-| `Could not send verification code` | Check Twilio logs under **Monitor** → **Logs** → **Errors** |
-| Uganda `+256` numbers | Ensure your Twilio account supports SMS to Uganda; trial may need verified numbers |
-
-## Alternative: console mode (no SMS)
-
-For local testing without Twilio:
-
-```env
-SMS_PROVIDER=console
-```
-
-OTP is logged in the server terminal and returned to the app as a test code.
+- **Twilio:** set `SMS_PROVIDER=twilio` + `TWILIO_*` vars
+- **Console (dev):** set `SMS_PROVIDER=console` — OTP logged on server only

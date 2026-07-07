@@ -21,6 +21,12 @@ function otpMessage(code) {
 }
 
 function isProviderConfigured(provider) {
+  if (provider === 'bird') {
+    const workspaceId = process.env.BIRD_WORKSPACE_ID;
+    const apiKey = process.env.BIRD_API_KEY;
+    const routeId = process.env.BIRD_NAVIGATOR_ID || process.env.BIRD_CHANNEL_ID;
+    return !!(workspaceId && apiKey && routeId);
+  }
   if (provider === 'twilio') {
     return !!(
       process.env.TWILIO_ACCOUNT_SID &&
@@ -32,6 +38,44 @@ function isProviderConfigured(provider) {
     return !!(process.env.AFRICAS_TALKING_USERNAME && process.env.AFRICAS_TALKING_API_KEY);
   }
   return false;
+}
+
+async function sendBirdSms(phone, code) {
+  const workspaceId = process.env.BIRD_WORKSPACE_ID;
+  const apiKey = process.env.BIRD_API_KEY;
+  const navigatorId = process.env.BIRD_NAVIGATOR_ID;
+  const channelId = process.env.BIRD_CHANNEL_ID;
+  const apiBase = process.env.BIRD_API_BASE || 'https://api.bird.com';
+
+  const routeType = navigatorId ? 'navigators' : 'channels';
+  const routeId = navigatorId || channelId;
+
+  const response = await fetch(
+    `${apiBase}/workspaces/${workspaceId}/${routeType}/${routeId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `AccessKey ${apiKey}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        receiver: {
+          contacts: [{ identifierValue: phone }],
+        },
+        body: {
+          type: 'text',
+          text: { text: otpMessage(code) },
+        },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const details = await response.text();
+    console.error('Bird SMS failed:', details);
+    throw new Error('Failed to deliver verification code');
+  }
 }
 
 async function sendTwilioSms(phone, code) {
@@ -98,7 +142,7 @@ async function sendAfricasTalkingSms(phone, code) {
 }
 
 async function sendOtpSms(phone, code) {
-  const provider = process.env.SMS_PROVIDER || 'twilio';
+  const provider = process.env.SMS_PROVIDER || 'bird';
 
   if (provider === 'console' || !isProviderConfigured(provider)) {
     if (provider !== 'console') {
@@ -108,6 +152,11 @@ async function sendOtpSms(phone, code) {
     }
     console.log(`[OTP] ${phone} -> ${code}`);
     return { delivered: false, channel: provider === 'console' ? 'console' : 'fallback' };
+  }
+
+  if (provider === 'bird') {
+    await sendBirdSms(phone, code);
+    return { delivered: true, channel: 'bird' };
   }
 
   if (provider === 'twilio') {

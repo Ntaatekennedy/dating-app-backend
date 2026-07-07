@@ -81,10 +81,11 @@ Send `Authorization: Bearer <token>` on protected routes.
 |----------|-------------|
 | `JWT_SECRET` | Secret for auth tokens |
 | `OTP_TTL_MINUTES` | OTP expiry (default `5`) |
-| `SMS_PROVIDER` | `twilio` (default), or `console` for local logs only |
-| `TWILIO_ACCOUNT_SID` | From [Twilio Console](https://console.twilio.com/) |
-| `TWILIO_AUTH_TOKEN` | Twilio auth token |
-| `TWILIO_PHONE_NUMBER` | Twilio sender number (E.164) |
+| `SMS_PROVIDER` | `bird` (default), `twilio`, or `console` |
+| `BIRD_WORKSPACE_ID` | Bird workspace ID |
+| `BIRD_API_KEY` | Bird access key |
+| `BIRD_NAVIGATOR_ID` | Bird navigator ID (recommended) |
+| `BIRD_CHANNEL_ID` | Bird SMS channel ID (alternative to navigator) |
 
 ## Flutter app
 

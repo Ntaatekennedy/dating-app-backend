@@ -30,13 +30,13 @@ Deploy from the [Railway dashboard](https://railway.com/dashboard) or the CLI.
    |----------|--------|
    | `JWT_SECRET` | A long random string |
    | `NODE_ENV` | `production` |
-   | `SMS_PROVIDER` | `twilio` |
+   | `SMS_PROVIDER` | `bird` |
    | `OTP_TTL_MINUTES` | `5` |
-   | `TWILIO_ACCOUNT_SID` | From [Twilio Console](https://console.twilio.com/) → Account Info |
-   | `TWILIO_AUTH_TOKEN` | From Twilio Console → Account Info |
-   | `TWILIO_PHONE_NUMBER` | Your Twilio number in E.164 format, e.g. `+15551234567` |
+   | `BIRD_WORKSPACE_ID` | `ws_01kwy5m1she1m8a1jm5g7dmqf8` |
+   | `BIRD_API_KEY` | Bird access key (Settings → Security → Access Keys) |
+   | `BIRD_NAVIGATOR_ID` | Navigator ID, or use `BIRD_CHANNEL_ID` |
 
-   See [SMS_SETUP.md](SMS_SETUP.md) for full Twilio setup steps.
+   See [SMS_SETUP.md](SMS_SETUP.md) for Bird setup steps.
 
    `BASE_URL` is optional — Railway’s public domain is used automatically.
 
