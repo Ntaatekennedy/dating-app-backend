@@ -54,9 +54,7 @@ router.get('/:userId/public', authRequired, async (req, res) => {
 
 router.get('/:userId/phone', authRequired, async (req, res) => {
   try {
-    const requesterId = req.user.userId;
     const { userId } = req.params;
-    const sub = await getActiveSubscription(requesterId);
 
     const [[user]] = await pool.query('SELECT phone FROM users WHERE id = ?', [userId]);
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -65,11 +63,7 @@ router.get('/:userId/phone', authRequired, async (req, res) => {
       return res.json({ phone: null, masked: true });
     }
 
-    if (!sub) {
-      return res.json({ phone: maskPhone(user.phone), masked: true });
-    }
-
-    res.json({ phone: user.phone, masked: false });
+    res.json({ phone: maskPhone(user.phone), masked: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load phone number' });

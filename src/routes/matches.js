@@ -104,11 +104,6 @@ router.post('/:matchId/messages', authRequired, async (req, res) => {
     const { matchId } = req.params;
     const { content } = req.body;
 
-    const sub = await getActiveSubscription(meId);
-    if (!sub) {
-      return res.status(403).json({ error: 'Subscribe to chat with your matches' });
-    }
-
     const match = await assertMatchMember(matchId, meId);
     if (!match) return res.status(404).json({ error: 'Match not found' });
 
