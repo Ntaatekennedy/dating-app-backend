@@ -1,73 +1,95 @@
-# SMS setup (sign-in OTP)
+# SMS setup with Twilio (sign-in OTP)
 
 Sign-in sends a 6-digit OTP by SMS. Sign-up does **not** use SMS.
 
-## Recommended: Africa's Talking (+256 Uganda)
+## 1. Get credentials from Twilio Console
 
-1. Create a free account at [africastalking.com](https://africastalking.com)
-2. Open **SMS** → **Create app** (use **Sandbox** for testing)
-3. Copy:
-   - **Username** (e.g. `sandbox`)
-   - **API Key** (from Settings → API Key)
-4. In **Sandbox**, add your test phone numbers under **Phone numbers**
+Open **[console.twilio.com](https://console.twilio.com/)** and sign in (or create a free account).
 
-### Railway (production)
+### Account SID & Auth Token
 
-In [Railway](https://railway.com/dashboard) → project `spark-dating-backend` → service **api** → **Variables**:
+1. On the **Account Dashboard** home page, find **Account Info**
+2. Copy **Account SID** (starts with `AC…`)
+3. Copy **Auth Token** (click **Show** to reveal it)
 
-| Variable | Value |
-|----------|--------|
-| `SMS_PROVIDER` | `africas_talking` |
+### Phone number
+
+1. Go to **Phone Numbers** → **Manage** → **Active numbers**
+   - Or: [console.twilio.com/us1/develop/phone-numbers/manage/incoming](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming)
+2. If you have no number, click **Buy a number** (trial accounts get a free number)
+3. Copy the number in E.164 format (e.g. `+15551234567`)
+
+### Trial account note
+
+On a **free trial**, SMS only works to **verified** phone numbers:
+
+1. Go to **Phone Numbers** → **Manage** → **Verified Caller IDs**
+2. Add and verify the phone numbers you want to test (e.g. your `+256…` number)
+
+## 2. Configure Railway (production API)
+
+[Railway](https://railway.com/dashboard) → project **spark-dating-backend** → service **api** → **Variables**:
+
+| Variable | Where to get it |
+|----------|-----------------|
+| `SMS_PROVIDER` | `twilio` |
 | `OTP_TTL_MINUTES` | `5` |
-| `AFRICAS_TALKING_USERNAME` | your username |
-| `AFRICAS_TALKING_API_KEY` | your API key |
-| `AFRICAS_TALKING_SENDER_ID` | `Spark` |
+| `TWILIO_ACCOUNT_SID` | Twilio Console → Account Info |
+| `TWILIO_AUTH_TOKEN` | Twilio Console → Account Info |
+| `TWILIO_PHONE_NUMBER` | Your Twilio number, e.g. `+15551234567` |
 
-Redeploy **api** after saving.
+Save variables, then redeploy **api** (or wait for auto-deploy).
 
-### Local dev
+## 3. Configure local backend
 
-In `backend/.env`:
+Edit `backend/.env`:
 
 ```env
-SMS_PROVIDER=africas_talking
-AFRICAS_TALKING_USERNAME=sandbox
-AFRICAS_TALKING_API_KEY=your_key
-AFRICAS_TALKING_SENDER_ID=Spark
+SMS_PROVIDER=twilio
+OTP_TTL_MINUTES=5
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_PHONE_NUMBER=+15551234567
 ```
 
-Or use `SMS_PROVIDER=console` to log OTP in the terminal (no real SMS).
+Restart the server: `npm run dev`
 
-## Alternative: Twilio
-
-1. Sign up at [twilio.com](https://www.twilio.com)
-2. Get **Account SID**, **Auth Token**, and a **Phone Number**
-3. On Railway set:
-
-| Variable | Value |
-|----------|--------|
-| `SMS_PROVIDER` | `twilio` |
-| `TWILIO_ACCOUNT_SID` | … |
-| `TWILIO_AUTH_TOKEN` | … |
-| `TWILIO_PHONE_NUMBER` | `+1…` |
-
-## CLI (Railway)
+## 4. Railway CLI (optional)
 
 ```bash
 cd backend
 railway service link api
-railway variable set SMS_PROVIDER=africas_talking OTP_TTL_MINUTES=5 AFRICAS_TALKING_SENDER_ID=Spark
-railway variable set AFRICAS_TALKING_USERNAME=your_username
-railway variable set AFRICAS_TALKING_API_KEY=your_api_key --stdin
-# paste key, then Ctrl+Z Enter on Windows
+railway variable set SMS_PROVIDER=twilio OTP_TTL_MINUTES=5
+railway variable set TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+railway variable set TWILIO_AUTH_TOKEN=your_auth_token
+railway variable set TWILIO_PHONE_NUMBER=+15551234567
+railway up --service api
 ```
 
-## Test
+## 5. Test sign-in
 
-```bash
-curl -X POST https://api-production-4f51.up.railway.app/api/auth/send-otp \
-  -H "Content-Type: application/json" \
-  -d "{\"phone\":\"+256700100001\",\"purpose\":\"login\"}"
+1. Use a phone number that exists in your app database (seed: `+256700100001`)
+2. On trial accounts, that number must be **verified** in Twilio Console
+3. In the app: enter phone → **Send verification code** → check SMS on the phone
+4. Enter the code → **Sign In**
+
+If Twilio is not configured, the server falls back to showing a test code in the app (for development only).
+
+## Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| `SMS service is not configured` | Set all three `TWILIO_*` variables on Railway |
+| SMS not received (trial) | Verify the destination number in Twilio Console |
+| `Could not send verification code` | Check Twilio logs under **Monitor** → **Logs** → **Errors** |
+| Uganda `+256` numbers | Ensure your Twilio account supports SMS to Uganda; trial may need verified numbers |
+
+## Alternative: console mode (no SMS)
+
+For local testing without Twilio:
+
+```env
+SMS_PROVIDER=console
 ```
 
-Use a phone number that exists in your database and is allowed in the SMS sandbox.
+OTP is logged in the server terminal and returned to the app as a test code.

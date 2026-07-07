@@ -98,7 +98,7 @@ async function sendAfricasTalkingSms(phone, code) {
 }
 
 async function sendOtpSms(phone, code) {
-  const provider = process.env.SMS_PROVIDER || 'africas_talking';
+  const provider = process.env.SMS_PROVIDER || 'twilio';
 
   if (provider === 'console' || !isProviderConfigured(provider)) {
     if (provider !== 'console') {
