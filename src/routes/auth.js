@@ -82,7 +82,8 @@ router.post('/send-otp', async (req, res) => {
       expiresInMinutes: OTP_TTL_MINUTES,
     };
 
-    if (process.env.NODE_ENV !== 'production' || process.env.EXPOSE_OTP === 'true') {
+    const smsProvider = process.env.SMS_PROVIDER || 'console';
+    if (smsProvider === 'console' || process.env.EXPOSE_OTP === 'true') {
       response.debugCode = code;
     }
 
