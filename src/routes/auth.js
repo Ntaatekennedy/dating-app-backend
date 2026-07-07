@@ -25,7 +25,8 @@ async function createLoginOtp(phone) {
      VALUES (?, ?, ?, 'login', DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
     [id, phone, code, OTP_TTL_MINUTES],
   );
-  await sendOtpSms(phone, code);
+  const delivery = await sendOtpSms(phone, code);
+  return { code, delivery };
 }
 
 async function consumeOtp(phone, code, purpose) {
@@ -57,16 +58,20 @@ router.post('/send-otp', async (req, res) => {
       return res.status(404).json({ error: 'No account found for this phone number' });
     }
 
-    await createLoginOtp(phone);
-    res.json({
-      message: 'Verification code sent to your phone',
+    const { code, delivery } = await createLoginOtp(phone);
+    const response = {
+      message: delivery.delivered
+        ? 'Verification code sent to your phone'
+        : 'Verification code generated',
       expiresInMinutes: OTP_TTL_MINUTES,
-    });
+      smsDelivered: delivery.delivered,
+    };
+    if (!delivery.delivered) {
+      response.debugCode = code;
+    }
+    res.json(response);
   } catch (err) {
     console.error(err);
-    if (err.message === 'SMS service is not configured') {
-      return res.status(503).json({ error: 'SMS service is not configured on the server' });
-    }
     if (err.message === 'Failed to deliver verification code') {
       return res.status(502).json({ error: 'Could not send verification code to this number' });
     }

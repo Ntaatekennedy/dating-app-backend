@@ -20,14 +20,24 @@ function otpMessage(code) {
   return `Your Spark Dating verification code is ${code}. It expires in ${ttl} minutes.`;
 }
 
+function isProviderConfigured(provider) {
+  if (provider === 'twilio') {
+    return !!(
+      process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_PHONE_NUMBER
+    );
+  }
+  if (provider === 'africas_talking') {
+    return !!(process.env.AFRICAS_TALKING_USERNAME && process.env.AFRICAS_TALKING_API_KEY);
+  }
+  return false;
+}
+
 async function sendTwilioSms(phone, code) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_PHONE_NUMBER;
-
-  if (!accountSid || !authToken || !from) {
-    throw new Error('SMS service is not configured');
-  }
 
   const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
   const response = await fetch(
@@ -57,10 +67,6 @@ async function sendAfricasTalkingSms(phone, code) {
   const username = process.env.AFRICAS_TALKING_USERNAME;
   const apiKey = process.env.AFRICAS_TALKING_API_KEY;
   const senderId = process.env.AFRICAS_TALKING_SENDER_ID || 'Spark';
-
-  if (!username || !apiKey) {
-    throw new Error('SMS service is not configured');
-  }
 
   const response = await fetch('https://api.africastalking.com/version1/messaging', {
     method: 'POST',
@@ -94,26 +100,33 @@ async function sendAfricasTalkingSms(phone, code) {
 async function sendOtpSms(phone, code) {
   const provider = process.env.SMS_PROVIDER || 'africas_talking';
 
+  if (provider === 'console' || !isProviderConfigured(provider)) {
+    if (provider !== 'console') {
+      console.warn(
+        `[OTP] SMS provider "${provider}" is not fully configured. Using console fallback.`,
+      );
+    }
+    console.log(`[OTP] ${phone} -> ${code}`);
+    return { delivered: false, channel: provider === 'console' ? 'console' : 'fallback' };
+  }
+
   if (provider === 'twilio') {
     await sendTwilioSms(phone, code);
-    return;
+    return { delivered: true, channel: 'twilio' };
   }
 
   if (provider === 'africas_talking') {
     await sendAfricasTalkingSms(phone, code);
-    return;
+    return { delivered: true, channel: 'africas_talking' };
   }
 
-  if (provider === 'console') {
-    console.log(`[OTP] ${phone} -> ${code}`);
-    return;
-  }
-
-  throw new Error(`Unsupported SMS provider: ${provider}`);
+  console.log(`[OTP] ${phone} -> ${code}`);
+  return { delivered: false, channel: 'unknown' };
 }
 
 module.exports = {
   normalizePhone,
   generateOtpCode,
   sendOtpSms,
+  isProviderConfigured,
 };
