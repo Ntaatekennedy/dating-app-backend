@@ -80,7 +80,7 @@ router.put('/preferences', authRequired, async (req, res) => {
   }
 });
 
-router.get('/interests', authRequired, async (_req, res) => {
+router.get('/interests', async (_req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM interests ORDER BY name');
     res.json(rows.map(mapInterest));
