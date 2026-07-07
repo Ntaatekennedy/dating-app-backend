@@ -10,7 +10,7 @@ const profileRoutes = require('./routes/profile');
 const subscriptionRoutes = require('./routes/subscriptions');
 const userRoutes = require('./routes/users');
 const { bootstrapDatabase } = require('../scripts/bootstrap-db');
-const { ensureAuthMigrations } = require('./utils/migrate');
+const { ensureAuthMigrations, ensureProductionDataMigrations } = require('./utils/migrate');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -37,6 +37,7 @@ app.use((err, _req, res, _next) => {
 
 bootstrapDatabase()
   .then(() => ensureAuthMigrations())
+  .then(() => ensureProductionDataMigrations())
   .catch((err) => {
     console.error('Database bootstrap failed:', err.message);
   });

@@ -1,4 +1,22 @@
+const fs = require('fs');
+const path = require('path');
 const pool = require('../config/db');
+
+async function runSqlFile(filePath) {
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const sql = raw
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*--.*$/gm, '')
+    .replace(/^\s*USE\s+\w+\s*;?\s*$/gim, '');
+  const statements = sql
+    .split(/;\s*\r?\n/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  for (const statement of statements) {
+    await pool.query(statement);
+  }
+}
 
 async function ensureAuthMigrations() {
   await pool.query(`
@@ -53,4 +71,16 @@ async function ensureAuthMigrations() {
   `);
 }
 
-module.exports = { ensureAuthMigrations };
+async function ensureProductionDataMigrations() {
+  const migrationsDir = path.join(__dirname, '../../scripts/migrations');
+  const files = ['seed_more_users.sql', 'update_show_me_all_genders.sql'];
+
+  for (const file of files) {
+    const filePath = path.join(migrationsDir, file);
+    if (!fs.existsSync(filePath)) continue;
+    console.log(`Applying migration: ${file}`);
+    await runSqlFile(filePath);
+  }
+}
+
+module.exports = { ensureAuthMigrations, ensureProductionDataMigrations };
