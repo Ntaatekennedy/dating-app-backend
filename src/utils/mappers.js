@@ -15,9 +15,9 @@ function mapUser(row) {
   if (!row) return null;
   return {
     id: row.id,
-    email: row.email,
+    email: row.email ?? '',
     phone: row.phone,
-    passwordHash: row.password_hash,
+    passwordHash: row.password_hash ?? '',
     isVerified: !!row.is_verified,
     isActive: !!row.is_active,
     lastActiveAt: row.last_active_at,

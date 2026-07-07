@@ -6,14 +6,26 @@
 -- 1. USERS
 CREATE TABLE users (
     id              CHAR(36)        PRIMARY KEY,
-    email           VARCHAR(255)    NOT NULL UNIQUE,
+    email           VARCHAR(255)    UNIQUE,
     phone           VARCHAR(20)     UNIQUE,
-    password_hash   VARCHAR(255)    NOT NULL,
+    password_hash   VARCHAR(255),
     is_verified     BOOLEAN         DEFAULT FALSE,
     is_active       BOOLEAN         DEFAULT TRUE,
     last_active_at  TIMESTAMP       NULL,
     created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE phone_otps (
+    id              CHAR(36)        PRIMARY KEY,
+    phone           VARCHAR(20)     NOT NULL,
+    code            VARCHAR(6)      NOT NULL,
+    purpose         ENUM('login', 'register') NOT NULL,
+    expires_at      TIMESTAMP       NOT NULL,
+    used_at         TIMESTAMP       NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_phone_otps_phone_purpose (phone, purpose),
+    INDEX idx_phone_otps_expires (expires_at)
 ) ENGINE=InnoDB;
 
 -- 2. PROFILES
