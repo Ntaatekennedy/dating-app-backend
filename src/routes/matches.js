@@ -80,6 +80,69 @@ async function assertMatchMember(matchId, userId) {
   return rows[0] || null;
 }
 
+router.post('/start', authRequired, async (req, res) => {
+  try {
+    const meId = req.user.userId;
+    const { otherUserId } = req.body;
+    if (!otherUserId) {
+      return res.status(400).json({ error: 'otherUserId required' });
+    }
+    if (otherUserId === meId) {
+      return res.status(400).json({ error: 'Cannot message yourself' });
+    }
+
+    const [[otherProfile]] = await pool.query(
+      'SELECT user_id FROM profiles WHERE user_id = ?',
+      [otherUserId],
+    );
+    if (!otherProfile) return res.status(404).json({ error: 'User not found' });
+
+    const [existingSwipe] = await pool.query(
+      'SELECT id, action FROM swipes WHERE swiper_id = ? AND swiped_id = ?',
+      [meId, otherUserId],
+    );
+    if (existingSwipe.length) {
+      if (existingSwipe[0].action === 'pass') {
+        await pool.query(
+          'UPDATE swipes SET action = ? WHERE swiper_id = ? AND swiped_id = ?',
+          ['like', meId, otherUserId],
+        );
+      }
+    } else {
+      await pool.query(
+        'INSERT INTO swipes (id, swiper_id, swiped_id, action) VALUES (?, ?, ?, ?)',
+        [uuidv4(), meId, otherUserId, 'like'],
+      );
+    }
+
+    const [u1, u2] = orderedPair(meId, otherUserId);
+    let [matches] = await pool.query(
+      'SELECT * FROM matches WHERE user1_id = ? AND user2_id = ?',
+      [u1, u2],
+    );
+
+    if (!matches.length) {
+      const matchId = uuidv4();
+      await pool.query(
+        'INSERT INTO matches (id, user1_id, user2_id, is_active) VALUES (?, ?, ?, TRUE)',
+        [matchId, u1, u2],
+      );
+      const [newMatch] = await pool.query('SELECT * FROM matches WHERE id = ?', [matchId]);
+      matches = newMatch;
+    } else if (!matches[0].is_active) {
+      await pool.query('UPDATE matches SET is_active = TRUE WHERE id = ?', [matches[0].id]);
+      const [reactivated] = await pool.query('SELECT * FROM matches WHERE id = ?', [matches[0].id]);
+      matches = reactivated;
+    }
+
+    const summary = await buildOtherUserSummary(meId, otherUserId, matches[0], true);
+    res.json(summary);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to start conversation' });
+  }
+});
+
 router.get('/', authRequired, async (req, res) => {
   try {
     const meId = req.user.userId;
