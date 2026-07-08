@@ -1,6 +1,6 @@
 # Dating App Backend
 
-Node.js REST API for the Spark Dating Flutter app (v1.0.18). Uses MySQL and mirrors the `dating_app.sql` schema.
+Node.js REST API for the Spark Dating Flutter app (v1.0.24). Uses MySQL and mirrors the `dating_app.sql` schema.
 
 ## Setup
 
@@ -67,7 +67,7 @@ Phone OTP routes (`/send-otp`, `/verify-otp-login`) remain available for optiona
 | PUT | `/api/profile/phone` | Update own phone |
 | GET | `/api/profile/photos/:userId` | List user photos |
 | POST | `/api/profile/photo` | Upload or replace primary photo |
-| POST | `/api/profile/photos` | Add gallery photo (max 6) |
+| POST | `/api/profile/photos` | Add gallery photo (max 3) |
 | DELETE | `/api/profile/photos/:photoId` | Delete a photo (including last one) |
 | GET | `/api/subscriptions/status` | Chat/phone access status |
 | POST | `/api/subscriptions/purchase` | Buy subscription |

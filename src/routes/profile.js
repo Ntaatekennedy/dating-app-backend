@@ -179,7 +179,7 @@ router.post('/photo', authRequired, upload.single('photo'), async (req, res) => 
   }
 });
 
-const MAX_PHOTOS = 6;
+const MAX_PHOTOS = 3;
 
 async function renumberUserPhotos(userId) {
   const [rows] = await pool.query(
