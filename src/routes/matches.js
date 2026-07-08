@@ -123,22 +123,34 @@ router.get('/:matchId/live', authRequired, async (req, res) => {
 
     let rows = [];
     if (after) {
+      // Use >= so same-second messages are not missed (MySQL TIMESTAMP is often
+      // second-precision). Clients de-dupe by message id.
       [rows] = await pool.query(
-        'SELECT * FROM messages WHERE match_id = ? AND sent_at > ? ORDER BY sent_at ASC',
+        'SELECT * FROM messages WHERE match_id = ? AND sent_at >= ? ORDER BY sent_at ASC, id ASC',
         [matchId, after],
       );
-      if (rows.length > 0) {
-        await pool.query(
-          `UPDATE messages SET is_read = TRUE
-           WHERE match_id = ? AND sender_id != ? AND is_read = FALSE`,
-          [matchId, meId],
-        );
-      }
+    } else {
+      // Empty chats previously returned nothing, so first incoming messages never
+      // appeared in the live feed. Always return the recent thread so clients can
+      // pick up new messages even without an `after` cursor.
+      [rows] = await pool.query(
+        'SELECT * FROM messages WHERE match_id = ? ORDER BY sent_at ASC, id ASC LIMIT 100',
+        [matchId],
+      );
+    }
+
+    if (rows.some((row) => row.sender_id !== meId && !row.is_read)) {
+      await pool.query(
+        `UPDATE messages SET is_read = TRUE
+         WHERE match_id = ? AND sender_id != ? AND is_read = FALSE`,
+        [matchId, meId],
+      );
     }
 
     res.json({
       messages: rows.map(mapMessage),
       otherUserTyping: isUserTyping(matchId, otherId),
+      serverTime: new Date().toISOString(),
     });
   } catch (err) {
     console.error(err);
