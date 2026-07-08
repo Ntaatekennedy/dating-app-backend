@@ -102,6 +102,18 @@ function buildDiscoverResults({ myProfile, prefs, rows, excludeSwipedIds, baseUr
   return poolResults;
 }
 
+async function getChattedPartnerIds(meId) {
+  const [rows] = await pool.query(
+    `SELECT DISTINCT
+       CASE WHEN m.user1_id = ? THEN m.user2_id ELSE m.user1_id END AS partner_id
+     FROM matches m
+     INNER JOIN messages msg ON msg.match_id = m.id
+     WHERE m.is_active = TRUE AND (m.user1_id = ? OR m.user2_id = ?)`,
+    [meId, meId, meId],
+  );
+  return new Set(rows.map((r) => r.partner_id));
+}
+
 async function getMatchedPartnerIds(meId) {
   const [rows] = await pool.query(
     `SELECT user1_id, user2_id FROM matches
@@ -153,6 +165,44 @@ router.get('/', authRequired, async (req, res) => {
     }
 
     const filteredRows = rows.filter((row) => !blockedIds.has(row.user_id));
+
+    const excludeChatted = req.query.excludeChatted === 'true';
+
+    if (excludeChatted) {
+      const chattedIds = await getChattedPartnerIds(meId);
+      const excludeIds = new Set([...allSwipedIds, ...chattedIds]);
+      const results = buildDiscoverResults({
+        myProfile,
+        prefs,
+        rows: filteredRows,
+        excludeSwipedIds: excludeIds,
+        baseUrl,
+      });
+
+      const userIds = results.map((r) => r._userId);
+      const interestMap = new Map();
+      if (userIds.length) {
+        const placeholders = userIds.map(() => '?').join(',');
+        const [interestRows] = await pool.query(
+          `SELECT ui.user_id, i.name
+           FROM user_interests ui
+           JOIN interests i ON i.id = ui.interest_id
+           WHERE ui.user_id IN (${placeholders})`,
+          userIds,
+        );
+        for (const row of interestRows) {
+          if (!interestMap.has(row.user_id)) interestMap.set(row.user_id, []);
+          interestMap.get(row.user_id).push(row.name);
+        }
+      }
+
+      const payload = results.slice(0, 20).map(({ _userId, ...rest }) => ({
+        ...rest,
+        interests: interestMap.get(_userId) || [],
+      }));
+
+      return res.json(payload);
+    }
 
     let results = buildDiscoverResults({
       myProfile,
