@@ -91,6 +91,11 @@ router.post('/start', authRequired, async (req, res) => {
       return res.status(400).json({ error: 'Cannot message yourself' });
     }
 
+    const sub = await getActiveSubscription(meId);
+    if (!sub) {
+      return res.status(402).json({ error: 'Subscribe to start chatting' });
+    }
+
     const [[otherProfile]] = await pool.query(
       'SELECT user_id FROM profiles WHERE user_id = ?',
       [otherUserId],
@@ -262,6 +267,11 @@ router.post('/:matchId/messages', authRequired, async (req, res) => {
 
     const match = await assertMatchMember(matchId, meId);
     if (!match) return res.status(404).json({ error: 'Match not found' });
+
+    const activeSub = await getActiveSubscription(meId);
+    if (!activeSub) {
+      return res.status(402).json({ error: 'Subscribe to send messages' });
+    }
 
     const text = (content || '').trim();
     if (!text) return res.status(400).json({ error: 'Message content required' });
