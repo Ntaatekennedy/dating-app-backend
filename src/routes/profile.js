@@ -238,6 +238,50 @@ router.post('/photos', authRequired, upload.single('photo'), async (req, res) =>
   }
 });
 
+router.delete('/account', authRequired, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const [[user]] = await conn.query('SELECT email, phone FROM users WHERE id = ?', [userId]);
+      if (!user) {
+        await conn.rollback();
+        return res.status(404).json({ error: 'Account not found' });
+      }
+
+      const [photos] = await conn.query('SELECT url FROM photos WHERE user_id = ?', [userId]);
+      for (const photo of photos) {
+        deleteStoredPhotoFile(photo.url);
+      }
+
+      await conn.query('DELETE FROM reports WHERE reporter_id = ? OR reported_id = ?', [
+        userId,
+        userId,
+      ]);
+      if (user.email) {
+        await conn.query('DELETE FROM password_reset_codes WHERE email = ?', [user.email]);
+      }
+      if (user.phone) {
+        await conn.query('DELETE FROM phone_otps WHERE phone = ?', [user.phone]);
+      }
+
+      await conn.query('DELETE FROM users WHERE id = ?', [userId]);
+      await conn.commit();
+      res.json({ message: 'Account deleted' });
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
 router.delete('/photos/:photoId', authRequired, async (req, res) => {
   try {
     const userId = req.user.userId;
