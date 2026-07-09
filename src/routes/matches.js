@@ -363,6 +363,7 @@ router.delete('/:matchId/messages', authRequired, async (req, res) => {
     const match = await assertMatchMember(matchId, meId);
     if (!match) return res.status(404).json({ error: 'Match not found' });
 
+    setTyping(matchId, meId, false);
     await pool.query('DELETE FROM messages WHERE match_id = ?', [matchId]);
     res.json({ ok: true });
   } catch (err) {
@@ -378,6 +379,8 @@ router.delete('/:matchId', authRequired, async (req, res) => {
     const match = await assertMatchMember(matchId, meId);
     if (!match) return res.status(404).json({ error: 'Match not found' });
 
+    setTyping(matchId, meId, false);
+    await pool.query('DELETE FROM messages WHERE match_id = ?', [matchId]);
     await pool.query('UPDATE matches SET is_active = FALSE WHERE id = ?', [matchId]);
     res.json({ ok: true });
   } catch (err) {
