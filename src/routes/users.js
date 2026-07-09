@@ -5,6 +5,7 @@ const { authRequired } = require('../middleware/auth');
 const { mapProfile, mapPhoto } = require('../utils/mappers');
 const { maskPhone } = require('../utils/helpers');
 const { resolveBaseUrl } = require('../utils/baseUrl');
+const { resolvePhotoUrl } = require('../utils/photoUrl');
 
 const router = express.Router();
 
@@ -30,9 +31,7 @@ router.get('/:userId/public', authRequired, async (req, res) => {
       'SELECT * FROM photos WHERE user_id = ? ORDER BY sort_order ASC LIMIT 1',
       [userId],
     );
-    const photo = photos[0]
-      ? mapPhoto(photos[0], baseUrl)
-      : { url: `https://picsum.photos/seed/${userId}/600/800` };
+    const photo = photos[0] ? mapPhoto(photos[0], baseUrl) : null;
 
     const [interests] = await pool.query(
       `SELECT i.name FROM user_interests ui
@@ -45,7 +44,7 @@ router.get('/:userId/public', authRequired, async (req, res) => {
 
     res.json({
       profile: mapProfile(profile),
-      primaryPhotoUrl: photo.url,
+      primaryPhotoUrl: photo?.url ?? null,
       interests: interests.map((i) => i.name),
       lastActiveAt: userRow?.last_active_at || null,
     });

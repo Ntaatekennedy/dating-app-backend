@@ -139,7 +139,6 @@ router.post('/register', async (req, res) => {
     const userId = uuidv4();
     const profileId = uuidv4();
     const prefId = uuidv4();
-    const photoId = uuidv4();
     const subId = uuidv4();
     const hash = await bcrypt.hash(password, 10);
 
@@ -178,12 +177,6 @@ router.post('/register', async (req, res) => {
       await conn.query(
         `INSERT INTO preferences (id, user_id, show_me) VALUES (?, ?, ?)`,
         [prefId, userId, JSON.stringify(['male', 'female', 'non_binary'])],
-      );
-
-      await conn.query(
-        `INSERT INTO photos (id, user_id, url, sort_order, is_approved)
-         VALUES (?, ?, ?, 0, TRUE)`,
-        [photoId, userId, `https://picsum.photos/seed/${userId}/600/800`],
       );
 
       await conn.query(

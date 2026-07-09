@@ -3,14 +3,9 @@ const pool = require('../config/db');
 const { authRequired } = require('../middleware/auth');
 const { mapProfile } = require('../utils/mappers');
 const { resolveBaseUrl } = require('../utils/baseUrl');
+const { resolvePhotoUrl } = require('../utils/photoUrl');
 
 const router = express.Router();
-
-function resolvePhotoUrl(baseUrl, userId, rawUrl) {
-  if (!rawUrl) return `https://picsum.photos/seed/${userId}/600/800`;
-  if (rawUrl.startsWith('http')) return rawUrl;
-  return `${baseUrl}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
-}
 
 router.get('/received', authRequired, async (req, res) => {
   try {
@@ -19,7 +14,7 @@ router.get('/received', authRequired, async (req, res) => {
 
     const [matches] = await pool.query(
       `SELECT user1_id, user2_id FROM matches
-       WHERE is_active = TRUE AND (user1_id = ? OR user2_id = ?)`,
+       WHERE user1_id = ? OR user2_id = ?`,
       [meId, meId],
     );
     const matchedOtherIds = new Set(
@@ -71,7 +66,7 @@ router.get('/received', authRequired, async (req, res) => {
 
       summaries.push({
         profile: mapProfile(profile),
-        primaryPhotoUrl: resolvePhotoUrl(baseUrl, otherId, photo?.url),
+        primaryPhotoUrl: resolvePhotoUrl(baseUrl, photo?.url),
         likedAt: row.created_at,
         isSuperLike: row.action === 'super_like',
         otherLastActiveAt: otherUser?.last_active_at || null,

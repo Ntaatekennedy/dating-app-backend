@@ -5,14 +5,9 @@ const { authRequired } = require('../middleware/auth');
 const { haversineKm, calculateAge, orderedPair } = require('../utils/helpers');
 const { mapProfile, mapMatch, parseJsonArray } = require('../utils/mappers');
 const { resolveBaseUrl } = require('../utils/baseUrl');
+const { resolvePhotoUrl } = require('../utils/photoUrl');
 
 const router = express.Router();
-
-function resolvePhotoUrl(baseUrl, userId, rawUrl) {
-  if (!rawUrl) return `https://picsum.photos/seed/${userId}/600/800`;
-  if (rawUrl.startsWith('http')) return rawUrl;
-  return `${baseUrl}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
-}
 
 async function loadDiscoverCandidates(meId) {
   const [[myProfile]] = await pool.query('SELECT * FROM profiles WHERE user_id = ?', [meId]);
@@ -77,7 +72,7 @@ function buildDiscoverResults({ myProfile, prefs, rows, excludeSwipedIds, baseUr
 
     const entry = {
       profile: mapProfile(row),
-      primaryPhotoUrl: resolvePhotoUrl(baseUrl, row.user_id, row.primary_photo_url),
+      primaryPhotoUrl: resolvePhotoUrl(baseUrl, row.primary_photo_url),
       distanceKm,
       interests: [],
       lastActiveAt: row.last_active_at,
@@ -167,6 +162,48 @@ router.get('/', authRequired, async (req, res) => {
     const filteredRows = rows.filter((row) => !blockedIds.has(row.user_id));
 
     const excludeChatted = req.query.excludeChatted === 'true';
+    const recycle = req.query.recycle === 'true';
+
+    if (recycle) {
+      const matchedIds = await getMatchedPartnerIds(meId);
+      let excludeIds = matchedIds;
+      if (excludeChatted) {
+        const chattedIds = await getChattedPartnerIds(meId);
+        excludeIds = new Set([...matchedIds, ...chattedIds]);
+      }
+
+      const results = buildDiscoverResults({
+        myProfile,
+        prefs,
+        rows: filteredRows,
+        excludeSwipedIds: excludeIds,
+        baseUrl,
+      });
+
+      const userIds = results.map((r) => r._userId);
+      const interestMap = new Map();
+      if (userIds.length) {
+        const placeholders = userIds.map(() => '?').join(',');
+        const [interestRows] = await pool.query(
+          `SELECT ui.user_id, i.name
+           FROM user_interests ui
+           JOIN interests i ON i.id = ui.interest_id
+           WHERE ui.user_id IN (${placeholders})`,
+          userIds,
+        );
+        for (const row of interestRows) {
+          if (!interestMap.has(row.user_id)) interestMap.set(row.user_id, []);
+          interestMap.get(row.user_id).push(row.name);
+        }
+      }
+
+      const payload = results.slice(0, 20).map(({ _userId, ...rest }) => ({
+        ...rest,
+        interests: interestMap.get(_userId) || [],
+      }));
+
+      return res.json(payload);
+    }
 
     if (excludeChatted) {
       const chattedIds = await getChattedPartnerIds(meId);

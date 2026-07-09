@@ -5,17 +5,12 @@ const { authRequired } = require('../middleware/auth');
 const { mapProfile, mapMatch, mapMessage } = require('../utils/mappers');
 const { orderedPair } = require('../utils/helpers');
 const { resolveBaseUrl } = require('../utils/baseUrl');
+const { resolvePhotoUrl } = require('../utils/photoUrl');
 const { setTyping, isUserTyping } = require('../utils/chatRealtime');
 
 const router = express.Router();
 
 const subscriptionsEnabled = process.env.SUBSCRIPTIONS_ENABLED === 'true';
-
-function resolvePhotoUrl(baseUrl, userId, rawUrl) {
-  if (!rawUrl) return `https://picsum.photos/seed/${userId}/600/800`;
-  if (rawUrl.startsWith('http')) return rawUrl;
-  return `${baseUrl}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
-}
 
 async function buildOtherUserSummary(meId, otherId, matchRow, isMutual) {
   const baseUrl = resolveBaseUrl();
@@ -45,7 +40,7 @@ async function buildOtherUserSummary(meId, otherId, matchRow, isMutual) {
     [otherId],
   );
 
-  const photoUrl = resolvePhotoUrl(baseUrl, otherId, photo?.url);
+  const photoUrl = resolvePhotoUrl(baseUrl, photo?.url);
 
   return {
     match: mapMatch(matchRow),
@@ -257,10 +252,16 @@ router.get('/:matchId/live', authRequired, async (req, res) => {
 
     const receipts = await fetchSenderReceipts(matchId, meId);
 
+    const [[otherUser]] = await pool.query(
+      'SELECT last_active_at FROM users WHERE id = ?',
+      [otherId],
+    );
+
     res.json({
       messages: rows.map(mapMessage),
       receipts,
       otherUserTyping: isUserTyping(matchId, otherId),
+      otherLastActiveAt: otherUser?.last_active_at || null,
       serverTime: new Date().toISOString(),
     });
   } catch (err) {
@@ -379,9 +380,17 @@ router.delete('/:matchId', authRequired, async (req, res) => {
     const match = await assertMatchMember(matchId, meId);
     if (!match) return res.status(404).json({ error: 'Match not found' });
 
+    const otherId = match.user1_id === meId ? match.user2_id : match.user1_id;
+
     setTyping(matchId, meId, false);
     await pool.query('DELETE FROM messages WHERE match_id = ?', [matchId]);
     await pool.query('UPDATE matches SET is_active = FALSE WHERE id = ?', [matchId]);
+    // Reset swipes so the other user returns to Discover instead of Liked/Matches.
+    await pool.query(
+      `DELETE FROM swipes
+       WHERE (swiper_id = ? AND swiped_id = ?) OR (swiper_id = ? AND swiped_id = ?)`,
+      [meId, otherId, otherId, meId],
+    );
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
