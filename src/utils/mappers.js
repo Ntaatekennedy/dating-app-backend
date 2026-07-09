@@ -97,6 +97,7 @@ function mapMessage(row) {
     matchId: row.match_id,
     senderId: row.sender_id,
     content: row.content,
+    isDelivered: !!row.is_delivered,
     isRead: !!row.is_read,
     sentAt: row.sent_at,
   };

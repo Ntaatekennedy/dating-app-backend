@@ -159,6 +159,7 @@ CREATE TABLE messages (
     sender_id       CHAR(36)        NOT NULL,
     content         TEXT            NOT NULL,
     is_read         BOOLEAN         DEFAULT FALSE,
+    is_delivered    BOOLEAN         DEFAULT FALSE,
     sent_at         TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_messages_match

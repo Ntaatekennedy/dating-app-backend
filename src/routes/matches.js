@@ -53,7 +53,7 @@ async function buildOtherUserSummary(meId, otherId, matchRow, isMutual) {
     primaryPhotoUrl: photoUrl,
     lastMessage: last?.content || null,
     lastMessageAt: last?.sent_at || matchRow.matched_at,
-    unreadCount: unread?.c || 0,
+    unreadCount: Number(unread?.c ?? 0),
     otherLastActiveAt: otherUser?.last_active_at || null,
     isMutual,
   };
@@ -89,6 +89,27 @@ async function assertMatchMember(matchId, userId) {
     [matchId, userId, userId],
   );
   return rows[0] || null;
+}
+
+async function markIncomingAsDelivered(matchId, recipientId) {
+  await pool.query(
+    `UPDATE messages SET is_delivered = TRUE
+     WHERE match_id = ? AND sender_id != ? AND is_delivered = FALSE`,
+    [matchId, recipientId],
+  );
+}
+
+async function fetchSenderReceipts(matchId, senderId) {
+  const [rows] = await pool.query(
+    `SELECT id, is_delivered, is_read FROM messages
+     WHERE match_id = ? AND sender_id = ?`,
+    [matchId, senderId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    isDelivered: !!row.is_delivered,
+    isRead: !!row.is_read,
+  }));
 }
 
 router.post('/start', authRequired, async (req, res) => {
@@ -206,6 +227,8 @@ router.get('/:matchId/live', authRequired, async (req, res) => {
     const otherId = match.user1_id === meId ? match.user2_id : match.user1_id;
     const after = req.query.after;
 
+    await markIncomingAsDelivered(matchId, meId);
+
     let rows = [];
     if (after) {
       // Use >= so same-second messages are not missed (MySQL TIMESTAMP is often
@@ -226,14 +249,17 @@ router.get('/:matchId/live', authRequired, async (req, res) => {
 
     if (rows.some((row) => row.sender_id !== meId && !row.is_read)) {
       await pool.query(
-        `UPDATE messages SET is_read = TRUE
+        `UPDATE messages SET is_read = TRUE, is_delivered = TRUE
          WHERE match_id = ? AND sender_id != ? AND is_read = FALSE`,
         [matchId, meId],
       );
     }
 
+    const receipts = await fetchSenderReceipts(matchId, meId);
+
     res.json({
       messages: rows.map(mapMessage),
+      receipts,
       otherUserTyping: isUserTyping(matchId, otherId),
       serverTime: new Date().toISOString(),
     });
@@ -264,6 +290,8 @@ router.get('/:matchId/messages', authRequired, async (req, res) => {
     const { matchId } = req.params;
     const match = await assertMatchMember(matchId, meId);
     if (!match) return res.status(404).json({ error: 'Match not found' });
+
+    await markIncomingAsDelivered(matchId, meId);
 
     const [rows] = await pool.query(
       'SELECT * FROM messages WHERE match_id = ? ORDER BY sent_at ASC',
@@ -317,7 +345,7 @@ router.post('/:matchId/read', authRequired, async (req, res) => {
     if (!match) return res.status(404).json({ error: 'Match not found' });
 
     await pool.query(
-      `UPDATE messages SET is_read = TRUE
+      `UPDATE messages SET is_read = TRUE, is_delivered = TRUE
        WHERE match_id = ? AND sender_id != ? AND is_read = FALSE`,
       [matchId, meId],
     );

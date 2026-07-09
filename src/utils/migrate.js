@@ -71,6 +71,22 @@ async function ensureAuthMigrations() {
   `);
 }
 
+async function ensureMessageDeliveryMigration() {
+  const [col] = await pool.query(`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'messages'
+      AND COLUMN_NAME = 'is_delivered'
+  `);
+
+  if (!col.length) {
+    await pool.query(
+      'ALTER TABLE messages ADD COLUMN is_delivered BOOLEAN NOT NULL DEFAULT FALSE AFTER is_read',
+    );
+  }
+}
+
 async function ensureProductionDataMigrations() {
   const migrationsDir = path.join(__dirname, '../../scripts/migrations');
   const files = ['seed_more_users.sql', 'update_show_me_all_genders.sql'];
@@ -83,4 +99,4 @@ async function ensureProductionDataMigrations() {
   }
 }
 
-module.exports = { ensureAuthMigrations, ensureProductionDataMigrations };
+module.exports = { ensureAuthMigrations, ensureMessageDeliveryMigration, ensureProductionDataMigrations };

@@ -11,10 +11,15 @@ const subscriptionRoutes = require('./routes/subscriptions');
 const likesRoutes = require('./routes/likes');
 const userRoutes = require('./routes/users');
 const { bootstrapDatabase } = require('../scripts/bootstrap-db');
-const { ensureAuthMigrations, ensureProductionDataMigrations } = require('./utils/migrate');
+const { ensureAuthMigrations, ensureMessageDeliveryMigration, ensureProductionDataMigrations } = require('./utils/migrate');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// MySQL COUNT(*) can return BigInt; Express must not throw while serializing.
+app.set('json replacer', (_key, value) =>
+  typeof value === 'bigint' ? Number(value) : value,
+);
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -39,6 +44,7 @@ app.use((err, _req, res, _next) => {
 
 bootstrapDatabase()
   .then(() => ensureAuthMigrations())
+  .then(() => ensureMessageDeliveryMigration())
   .then(() => ensureProductionDataMigrations())
   .catch((err) => {
     console.error('Database bootstrap failed:', err.message);
