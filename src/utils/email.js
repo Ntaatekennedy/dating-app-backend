@@ -43,7 +43,8 @@ function isEmailOtpConfigured() {
 function passwordResetEmailFrom() {
   const explicit = process.env.PASSWORD_RESET_EMAIL_FROM;
   if (explicit?.includes('<')) return explicit;
-  const address = explicit || 'devflow@tokmail.net';
+  // Bird shared onboarding domain — works without custom domain verification.
+  const address = explicit || 'onboarding@messagebird.dev';
   const name = process.env.PASSWORD_RESET_EMAIL_FROM_NAME || 'Spark Dating';
   return `${name} <${address}>`;
 }
