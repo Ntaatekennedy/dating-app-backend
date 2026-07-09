@@ -71,5 +71,6 @@ If Bird is not fully configured, the server falls back to showing a test code in
 
 ## Alternative providers
 
+- **Africa's Talking:** set `SMS_PROVIDER=africas_talking`, `AFRICAS_TALKING_USERNAME`, and `AFRICAS_TALKING_API_KEY` (JWT from dashboard)
 - **Twilio:** set `SMS_PROVIDER=twilio` + `TWILIO_*` vars
 - **Console (dev):** set `SMS_PROVIDER=console` — OTP logged on server only

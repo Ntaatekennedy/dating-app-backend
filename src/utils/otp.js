@@ -20,11 +20,30 @@ function otpMessage(code) {
   return `Your Spark Dating verification code is ${code}. It expires in ${ttl} minutes.`;
 }
 
+function isJwtApiKey(key) {
+  return typeof key === 'string' && key.startsWith('eyJ') && key.includes('.');
+}
+
+function resolveAfricaTalkingApiKey() {
+  if (process.env.AFRICAS_TALKING_API_KEY) return process.env.AFRICAS_TALKING_API_KEY;
+  const birdKey = process.env.BIRD_API_KEY || '';
+  if (isJwtApiKey(birdKey)) return birdKey;
+  return null;
+}
+
+function resolveSmsProvider() {
+  const configured = process.env.SMS_PROVIDER || 'bird';
+  if (configured === 'africas_talking') return 'africas_talking';
+  if (resolveAfricaTalkingApiKey()) return 'africas_talking';
+  return configured;
+}
+
 function isProviderConfigured(provider) {
   if (provider === 'bird') {
     const workspaceId = process.env.BIRD_WORKSPACE_ID;
     const apiKey = process.env.BIRD_API_KEY;
     const routeId = process.env.BIRD_NAVIGATOR_ID || process.env.BIRD_CHANNEL_ID;
+    if (isJwtApiKey(apiKey)) return false;
     return !!(workspaceId && apiKey && routeId);
   }
   if (provider === 'twilio') {
@@ -35,7 +54,10 @@ function isProviderConfigured(provider) {
     );
   }
   if (provider === 'africas_talking') {
-    return !!(process.env.AFRICAS_TALKING_USERNAME && process.env.AFRICAS_TALKING_API_KEY);
+    return !!(
+      process.env.AFRICAS_TALKING_USERNAME &&
+      resolveAfricaTalkingApiKey()
+    );
   }
   return false;
 }
@@ -118,7 +140,7 @@ async function sendTwilioSms(phone, code) {
 
 async function sendAfricasTalkingSms(phone, code) {
   const username = process.env.AFRICAS_TALKING_USERNAME;
-  const apiKey = process.env.AFRICAS_TALKING_API_KEY;
+  const apiKey = resolveAfricaTalkingApiKey();
   const senderId = process.env.AFRICAS_TALKING_SENDER_ID || 'Spark';
 
   const response = await fetch('https://api.africastalking.com/version1/messaging', {
@@ -151,7 +173,7 @@ async function sendAfricasTalkingSms(phone, code) {
 }
 
 async function sendOtpSms(phone, code) {
-  const provider = process.env.SMS_PROVIDER || 'bird';
+  const provider = resolveSmsProvider();
 
   if (provider === 'console' || !isProviderConfigured(provider)) {
     if (provider !== 'console') {
