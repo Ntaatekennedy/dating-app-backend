@@ -9,6 +9,8 @@ const { setTyping, isUserTyping } = require('../utils/chatRealtime');
 
 const router = express.Router();
 
+const subscriptionsEnabled = process.env.SUBSCRIPTIONS_ENABLED === 'true';
+
 function resolvePhotoUrl(baseUrl, userId, rawUrl) {
   if (!rawUrl) return `https://picsum.photos/seed/${userId}/600/800`;
   if (rawUrl.startsWith('http')) return rawUrl;
@@ -25,7 +27,7 @@ async function buildOtherUserSummary(meId, otherId, matchRow, isMutual) {
 
   let last = null;
   let unread = { c: 0 };
-  if (isMutual && matchRow.id && !String(matchRow.id).startsWith('pending-')) {
+  if (matchRow.id && !String(matchRow.id).startsWith('pending-')) {
     const [msgs] = await pool.query(
       'SELECT * FROM messages WHERE match_id = ? ORDER BY sent_at DESC LIMIT 1',
       [matchRow.id],
@@ -49,12 +51,21 @@ async function buildOtherUserSummary(meId, otherId, matchRow, isMutual) {
     match: mapMatch(matchRow),
     otherProfile: mapProfile(profile),
     primaryPhotoUrl: photoUrl,
-    lastMessage: isMutual ? (last?.content || null) : 'You liked them',
-    lastMessageAt: isMutual ? (last?.sent_at || null) : matchRow.matched_at,
-    unreadCount: isMutual ? (unread?.c || 0) : 0,
+    lastMessage: last?.content || null,
+    lastMessageAt: last?.sent_at || matchRow.matched_at,
+    unreadCount: unread?.c || 0,
     otherLastActiveAt: otherUser?.last_active_at || null,
     isMutual,
   };
+}
+
+async function hasReciprocalLike(meId, otherId) {
+  const [rows] = await pool.query(
+    `SELECT id FROM swipes
+     WHERE swiper_id = ? AND swiped_id = ? AND action IN ('like', 'super_like')`,
+    [otherId, meId],
+  );
+  return rows.length > 0;
 }
 
 async function getActiveSubscription(userId) {
@@ -92,7 +103,7 @@ router.post('/start', authRequired, async (req, res) => {
     }
 
     const sub = await getActiveSubscription(meId);
-    if (!sub) {
+    if (subscriptionsEnabled && !sub) {
       return res.status(402).json({ error: 'Subscribe to start chatting' });
     }
 
@@ -140,7 +151,12 @@ router.post('/start', authRequired, async (req, res) => {
       matches = reactivated;
     }
 
-    const summary = await buildOtherUserSummary(meId, otherUserId, matches[0], true);
+    const summary = await buildOtherUserSummary(
+      meId,
+      otherUserId,
+      matches[0],
+      await hasReciprocalLike(meId, otherUserId),
+    );
     res.json(summary);
   } catch (err) {
     console.error(err);
@@ -163,7 +179,8 @@ router.get('/', authRequired, async (req, res) => {
     for (const m of matches) {
       const otherId = m.user1_id === meId ? m.user2_id : m.user1_id;
       matchedOtherIds.add(otherId);
-      summaries.push(await buildOtherUserSummary(meId, otherId, m, true));
+      const isMutual = await hasReciprocalLike(meId, otherId);
+      summaries.push(await buildOtherUserSummary(meId, otherId, m, isMutual));
     }
 
     summaries.sort((a, b) => {
@@ -269,7 +286,7 @@ router.post('/:matchId/messages', authRequired, async (req, res) => {
     if (!match) return res.status(404).json({ error: 'Match not found' });
 
     const activeSub = await getActiveSubscription(meId);
-    if (!activeSub) {
+    if (subscriptionsEnabled && !activeSub) {
       return res.status(402).json({ error: 'Subscribe to send messages' });
     }
 
@@ -308,6 +325,36 @@ router.post('/:matchId/read', authRequired, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to mark messages read' });
+  }
+});
+
+router.delete('/:matchId/messages', authRequired, async (req, res) => {
+  try {
+    const meId = req.user.userId;
+    const { matchId } = req.params;
+    const match = await assertMatchMember(matchId, meId);
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+
+    await pool.query('DELETE FROM messages WHERE match_id = ?', [matchId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to clear chat history' });
+  }
+});
+
+router.delete('/:matchId', authRequired, async (req, res) => {
+  try {
+    const meId = req.user.userId;
+    const { matchId } = req.params;
+    const match = await assertMatchMember(matchId, meId);
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+
+    await pool.query('UPDATE matches SET is_active = FALSE WHERE id = ?', [matchId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete match' });
   }
 });
 

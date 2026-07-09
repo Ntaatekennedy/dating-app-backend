@@ -280,7 +280,14 @@ router.post('/swipe', authRequired, async (req, res) => {
     if (existing.length) {
       const alreadyMatched = await userHasActiveMatch(meId, swipedUserId);
       if (alreadyMatched) {
-        return res.status(409).json({ error: 'Already matched with this user' });
+        const [u1, u2] = orderedPair(meId, swipedUserId);
+        const [matches] = await pool.query(
+          'SELECT * FROM matches WHERE user1_id = ? AND user2_id = ?',
+          [u1, u2],
+        );
+        if (matches.length) {
+          return res.json({ isMatch: true, match: mapMatch(matches[0]) });
+        }
       }
       if (existing[0].action !== action) {
         await pool.query(
