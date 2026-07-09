@@ -30,13 +30,16 @@ Deploy from the [Railway dashboard](https://railway.com/dashboard) or the CLI.
    |----------|--------|
    | `JWT_SECRET` | A long random string |
    | `NODE_ENV` | `production` |
-   | `SMS_PROVIDER` | `bird` |
-   | `OTP_TTL_MINUTES` | `5` |
+   | `EMAIL_PROVIDER` | `bird` |
    | `BIRD_WORKSPACE_ID` | `ws_01kwy5m1she1m8a1jm5g7dmqf8` |
-   | `BIRD_API_KEY` | Bird access key (Settings → Security → Access Keys) |
-   | `BIRD_NAVIGATOR_ID` | Navigator ID, or use `BIRD_CHANNEL_ID` |
+   | `BIRD_API_KEY` | Bird access key (`bk_eu1_...`) |
+   | `PASSWORD_RESET_EMAIL_FROM` | `devflow@tokmail.net` |
+   | `PASSWORD_RESET_EMAIL_FROM_NAME` | `Spark Dating` |
+   | `OTP_TTL_MINUTES` | `5` |
+   | `SMS_PROVIDER` | `bird` or `africas_talking` |
+   | `BIRD_NAVIGATOR_ID` | Navigator ID (SMS), or use `BIRD_CHANNEL_ID` |
 
-   See [SMS_SETUP.md](SMS_SETUP.md) for Bird setup steps.
+   See [EMAIL_SETUP.md](EMAIL_SETUP.md) for password reset email and [SMS_SETUP.md](SMS_SETUP.md) for SMS OTP.
 
    `BASE_URL` is optional — Railway’s public domain is used automatically.
 

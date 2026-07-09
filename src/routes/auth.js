@@ -7,6 +7,7 @@ const { authRequired } = require('../middleware/auth');
 const { verifyPassword } = require('../utils/helpers');
 const { mapUser, mapProfile, mapPreferences } = require('../utils/mappers');
 const { normalizePhone, generateOtpCode, sendOtpSms } = require('../utils/otp');
+const { sendPasswordResetEmail } = require('../utils/email');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
@@ -67,7 +68,9 @@ router.post('/send-otp', async (req, res) => {
       smsDelivered: delivery.delivered,
     };
     if (!delivery.delivered) {
-      response.debugCode = code;
+      if (process.env.EXPOSE_OTP === 'true') {
+        response.debugCode = code;
+      }
     }
     res.json(response);
   } catch (err) {
@@ -248,13 +251,31 @@ router.post('/forgot-password', async (req, res) => {
       [id, email, code, OTP_TTL_MINUTES],
     );
 
-    console.log(`[Password reset] ${email} -> ${code}`);
+    let delivery;
+    try {
+      delivery = await sendPasswordResetEmail(email, code);
+    } catch (err) {
+      console.error(err);
+      return res.status(502).json({ error: 'Could not send reset code to this email address' });
+    }
 
-    res.json({
-      message: 'If an account exists for this email, a reset code has been sent',
+    if (!delivery.delivered && process.env.EXPOSE_OTP !== 'true') {
+      return res.status(502).json({ error: 'Could not send reset code to this email address' });
+    }
+
+    const response = {
+      message: delivery.delivered
+        ? 'Reset code sent to your email'
+        : 'If an account exists for this email, a reset code has been sent',
       expiresInMinutes: OTP_TTL_MINUTES,
-      debugCode: code,
-    });
+      emailDelivered: delivery.delivered,
+    };
+
+    if (!delivery.delivered && process.env.EXPOSE_OTP === 'true') {
+      response.debugCode = code;
+    }
+
+    res.json(response);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to send reset code' });
@@ -339,6 +360,17 @@ router.post('/ping', authRequired, async (req, res) => {
   try {
     const userId = req.user.userId;
     await pool.query('UPDATE users SET last_active_at = NOW() WHERE id = ?', [userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update activity' });
+  }
+});
+
+router.post('/offline', authRequired, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    await pool.query('UPDATE users SET last_active_at = NULL WHERE id = ?', [userId]);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
