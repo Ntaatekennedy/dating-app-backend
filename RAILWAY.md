@@ -36,6 +36,7 @@ Deploy from the [Railway dashboard](https://railway.com/dashboard) or the CLI.
    | `PASSWORD_RESET_EMAIL_FROM` | `devflow@tokmail.net` |
    | `PASSWORD_RESET_EMAIL_FROM_NAME` | `Spark Dating` |
    | `OTP_TTL_MINUTES` | `5` |
+   | `SUBSCRIPTIONS_ENABLED` | `true` |
    | `SMS_PROVIDER` | `bird` or `africas_talking` |
    | `BIRD_NAVIGATOR_ID` | Navigator ID (SMS), or use `BIRD_CHANNEL_ID` |
 

@@ -7,6 +7,8 @@ const { planDurationDays } = require('../utils/helpers');
 
 const router = express.Router();
 
+const subscriptionsEnabled = process.env.SUBSCRIPTIONS_ENABLED === 'true';
+
 async function getActiveSubscription(userId) {
   const [rows] = await pool.query(
     `SELECT * FROM subscriptions
@@ -22,7 +24,7 @@ router.get('/status', authRequired, async (req, res) => {
   try {
     const sub = await getActiveSubscription(req.user.userId);
     res.json({
-      hasChatAccess: !!sub,
+      hasChatAccess: !subscriptionsEnabled || !!sub,
       activeSubscription: sub ? mapSubscription(sub) : null,
     });
   } catch (err) {
