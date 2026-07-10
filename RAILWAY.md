@@ -33,7 +33,7 @@ Deploy from the [Railway dashboard](https://railway.com/dashboard) or the CLI.
    | `EMAIL_PROVIDER` | `bird` |
    | `BIRD_WORKSPACE_ID` | `ws_01kwy5m1she1m8a1jm5g7dmqf8` |
    | `BIRD_API_KEY` | Bird access key (`bk_eu1_...`) |
-   | `PASSWORD_RESET_EMAIL_FROM` | `devflow@tokmail.net` |
+   | `PASSWORD_RESET_EMAIL_FROM` | `onboarding@messagebird.dev` (or `noreply@your-verified-domain` after DNS) |
    | `PASSWORD_RESET_EMAIL_FROM_NAME` | `Spark Dating` |
    | `OTP_TTL_MINUTES` | `5` |
    | `SUBSCRIPTIONS_ENABLED` | `true` |

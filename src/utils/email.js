@@ -40,10 +40,14 @@ function isEmailOtpConfigured() {
   return isBirdEmailConfigured() || isTermiiEmailConfigured();
 }
 
+function isOnboardingSender(address) {
+  return /@messagebird\.dev$/i.test(String(address || '').replace(/.*</, '').replace(/>.*/, '').trim());
+}
+
 function passwordResetEmailFrom() {
   const explicit = process.env.PASSWORD_RESET_EMAIL_FROM;
   if (explicit?.includes('<')) return explicit;
-  // Bird shared onboarding domain — works without custom domain verification.
+  // Bird shared onboarding domain — only delivers to verified workspace members.
   const address = explicit || 'onboarding@messagebird.dev';
   const name = process.env.PASSWORD_RESET_EMAIL_FROM_NAME || 'Spark Dating';
   return `${name} <${address}>`;
@@ -69,9 +73,49 @@ function passwordResetEmailHtml(code) {
   );
 }
 
+function parseBirdError(details) {
+  try {
+    const payload = JSON.parse(details);
+    const err = payload?.error || payload;
+    const name = err?.name || err?.code || '';
+    const message = err?.message || '';
+    const remediation = err?.remediation || '';
+
+    if (name === 'OnboardingRecipientNotAllowed' || /onboarding domain/i.test(message)) {
+      return (
+        'Bird can only email verified workspace members while using onboarding@messagebird.dev. ' +
+        'Invite this address in Bird → Settings → Team, or verify your own sending domain and set PASSWORD_RESET_EMAIL_FROM.'
+      );
+    }
+    if (name === 'OnboardingSendLimitExceeded' || /daily/i.test(message)) {
+      return 'Bird onboarding email daily limit reached. Try again tomorrow or verify a custom sending domain.';
+    }
+    if (name === 'SenderDomainNotVerified' || /not verified/i.test(message)) {
+      return (
+        'Bird sending domain is not verified yet. Finish DNS (DKIM, return-path, DMARC) in Bird → Email → Domains, ' +
+        'then set PASSWORD_RESET_EMAIL_FROM to an address on that domain.'
+      );
+    }
+    if (message) {
+      return remediation ? `${message} ${remediation}` : message;
+    }
+  } catch {
+    // fall through
+  }
+  return details?.trim() ? details.trim().slice(0, 280) : 'Failed to deliver email';
+}
+
 async function sendBirdEmail(to, subject, text, html) {
   const apiKey = resolveBirdApiKey();
   const apiBase = birdEmailApiBase(apiKey);
+  const from = passwordResetEmailFrom();
+
+  if (isOnboardingSender(from)) {
+    console.warn(
+      '[Email] Sending from Bird onboarding domain. Recipients must be verified Bird workspace members ' +
+        'unless you verify a custom domain.',
+    );
+  }
 
   const response = await fetch(`${apiBase}/v1/email/messages`, {
     method: 'POST',
@@ -81,7 +125,7 @@ async function sendBirdEmail(to, subject, text, html) {
       Accept: 'application/json',
     },
     body: JSON.stringify({
-      from: passwordResetEmailFrom(),
+      from,
       to: [to],
       subject,
       text,
@@ -93,8 +137,14 @@ async function sendBirdEmail(to, subject, text, html) {
   if (!response.ok) {
     const details = await response.text();
     console.error('Bird email failed:', details);
-    throw new Error('Failed to deliver email');
+    throw new Error(parseBirdError(details));
   }
+
+  const payload = await response.json().catch(() => ({}));
+  return {
+    id: payload.id || null,
+    status: payload.status || 'accepted',
+  };
 }
 
 async function sendTermiiEmailOtp(email, code) {
@@ -145,8 +195,8 @@ async function sendPasswordResetEmail(email, code) {
       console.log(`[Password reset email] ${email} -> ${code}`);
       return { delivered: false, channel: 'console' };
     }
-    await sendBirdEmail(email, subject, text, html);
-    return { delivered: true, channel: 'bird' };
+    const result = await sendBirdEmail(email, subject, text, html);
+    return { delivered: true, channel: 'bird', messageId: result.id };
   }
 
   if (provider === 'termii') {
@@ -173,4 +223,7 @@ module.exports = {
   isEmailOtpConfigured,
   passwordResetEmailSubject,
   passwordResetEmailBody,
+  birdEmailApiBase,
+  passwordResetEmailFrom,
+  parseBirdError,
 };

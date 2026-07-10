@@ -249,7 +249,9 @@ router.post('/forgot-password', async (req, res) => {
       delivery = await sendPasswordResetEmail(email, code);
     } catch (err) {
       console.error(err);
-      return res.status(502).json({ error: 'Could not send reset code to this email address' });
+      return res.status(502).json({
+        error: err.message || 'Could not send reset code to this email address',
+      });
     }
 
     if (!delivery.delivered && process.env.EXPOSE_OTP !== 'true') {
