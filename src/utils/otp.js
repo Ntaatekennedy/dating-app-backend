@@ -209,4 +209,5 @@ module.exports = {
   generateOtpCode,
   sendOtpSms,
   isProviderConfigured,
+  resolveSmsProvider,
 };
