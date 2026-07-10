@@ -2,6 +2,10 @@ function resolveBirdApiKey() {
   return process.env.BIRD_API_KEY || '';
 }
 
+function resolveResendApiKey() {
+  return process.env.RESEND_API_KEY || '';
+}
+
 function resolveTermiiApiKey() {
   return (
     process.env.TERMII_API_KEY ||
@@ -30,6 +34,10 @@ function isBirdEmailConfigured() {
   return apiKey.startsWith('bk_');
 }
 
+function isResendEmailConfigured() {
+  return resolveResendApiKey().startsWith('re_');
+}
+
 function isTermiiEmailConfigured() {
   const apiKey = resolveTermiiApiKey();
   const configId = process.env.TERMII_EMAIL_CONFIG_ID;
@@ -37,18 +45,24 @@ function isTermiiEmailConfigured() {
 }
 
 function isEmailOtpConfigured() {
-  return isBirdEmailConfigured() || isTermiiEmailConfigured();
+  return isResendEmailConfigured() || isBirdEmailConfigured() || isTermiiEmailConfigured();
 }
 
 function isOnboardingSender(address) {
-  return /@messagebird\.dev$/i.test(String(address || '').replace(/.*</, '').replace(/>.*/, '').trim());
+  const email = String(address || '').replace(/.*</, '').replace(/>.*/, '').trim();
+  return /@(messagebird\.dev|resend\.dev)$/i.test(email);
+}
+
+function defaultFromAddress() {
+  const provider = resolveEmailProvider();
+  if (provider === 'resend') return 'onboarding@resend.dev';
+  return 'onboarding@messagebird.dev';
 }
 
 function passwordResetEmailFrom() {
   const explicit = process.env.PASSWORD_RESET_EMAIL_FROM;
   if (explicit?.includes('<')) return explicit;
-  // Bird shared onboarding domain — only delivers to verified workspace members.
-  const address = explicit || 'onboarding@messagebird.dev';
+  const address = explicit || defaultFromAddress();
   const name = process.env.PASSWORD_RESET_EMAIL_FROM_NAME || 'Spark Dating';
   return `${name} <${address}>`;
 }
@@ -105,6 +119,23 @@ function parseBirdError(details) {
   return details?.trim() ? details.trim().slice(0, 280) : 'Failed to deliver email';
 }
 
+function parseResendError(details) {
+  try {
+    const payload = JSON.parse(details);
+    const message = payload?.message || payload?.error || '';
+    if (/only send testing emails to your own email/i.test(message) || /resend\.dev/i.test(message)) {
+      return (
+        'Resend can only email the address on your Resend account while using onboarding@resend.dev. ' +
+        'Use that same email in Spark, or verify a domain at resend.com/domains and set PASSWORD_RESET_EMAIL_FROM.'
+      );
+    }
+    if (message) return String(message);
+  } catch {
+    // fall through
+  }
+  return details?.trim() ? details.trim().slice(0, 280) : 'Failed to deliver email';
+}
+
 async function sendBirdEmail(to, subject, text, html) {
   const apiKey = resolveBirdApiKey();
   const apiBase = birdEmailApiBase(apiKey);
@@ -147,6 +178,46 @@ async function sendBirdEmail(to, subject, text, html) {
   };
 }
 
+async function sendResendEmail(to, subject, text, html) {
+  const apiKey = resolveResendApiKey();
+  const from = passwordResetEmailFrom();
+
+  if (isOnboardingSender(from)) {
+    console.warn(
+      '[Email] Sending from Resend onboarding domain. Recipients must match your Resend account email ' +
+        'unless you verify a custom domain.',
+    );
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      text,
+      html,
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    console.error('Resend email failed:', details);
+    throw new Error(parseResendError(details));
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  return {
+    id: payload.id || null,
+    status: 'accepted',
+  };
+}
+
 async function sendTermiiEmailOtp(email, code) {
   const apiKey = resolveTermiiApiKey();
   const emailConfigId = process.env.TERMII_EMAIL_CONFIG_ID;
@@ -178,6 +249,7 @@ async function sendTermiiEmailOtp(email, code) {
 function resolveEmailProvider() {
   const configured = process.env.EMAIL_PROVIDER;
   if (configured) return configured;
+  if (isResendEmailConfigured()) return 'resend';
   if (isBirdEmailConfigured()) return 'bird';
   if (isTermiiEmailConfigured()) return 'termii';
   return 'console';
@@ -188,6 +260,16 @@ async function sendPasswordResetEmail(email, code) {
   const subject = passwordResetEmailSubject();
   const text = passwordResetEmailBody(code);
   const html = passwordResetEmailHtml(code);
+
+  if (provider === 'resend') {
+    if (!isResendEmailConfigured()) {
+      console.warn('[Email] Resend is not configured (missing RESEND_API_KEY).');
+      console.log(`[Password reset email] ${email} -> ${code}`);
+      return { delivered: false, channel: 'console' };
+    }
+    const result = await sendResendEmail(email, subject, text, html);
+    return { delivered: true, channel: 'resend', messageId: result.id };
+  }
 
   if (provider === 'bird') {
     if (!isBirdEmailConfigured()) {
@@ -226,4 +308,5 @@ module.exports = {
   birdEmailApiBase,
   passwordResetEmailFrom,
   parseBirdError,
+  parseResendError,
 };
