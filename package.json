@@ -6,7 +6,21 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "bird:email": "node scripts/configure-bird-email.js"
+    "bird:email": "node scripts/configure-bird-email.js",
+    "resend:test": "node scripts/test-resend-email.js",
+    "momo:setup": "node scripts/setup-mtn-momo-sandbox.js",
+    "flutterwave:test": "node scripts/test-flutterwave-token.js",
+    "flutterwave:customers": "node scripts/test-flutterwave-customers.js",
+    "flutterwave:test-charge": "node scripts/test-flutterwave-mobile-money.js",
+    "flutterwave:setup": "node scripts/setup-flutterwave.js",
+    "pesapal:test": "node scripts/test-pesapal-auth.js",
+    "pesapal:register-ipn": "node scripts/test-pesapal-auth.js",
+    "pesapal:setup": "node scripts/setup-pesapal.js",
+    "pesapal:grant": "node scripts/grant-pesapal-subscription.js",
+    "pesapal:register-production-ipn": "node scripts/register-pesapal-production-ipn.js",
+    "railway:sync-payments": "node scripts/sync-railway-payments.js",
+    "railway:setup-uploads": "node scripts/setup-railway-uploads.js",
+    "photos:test": "node scripts/test-photo-upload.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -16,6 +30,7 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.12.0",
+    "resend": "^6.17.2",
     "uuid": "^11.0.5"
   }
 }

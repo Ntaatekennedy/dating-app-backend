@@ -1,5 +1,8 @@
-const { normalizePhone, isProviderConfigured, resolveSmsProvider } = require('./otp');
-
+const { normalizePhone, resolveAfricaTalkingApiKey } = require('./otp');
+const { APP_DISPLAY_NAME } = require('../constants');
+const { isMtnMomoConfigured, initiateMtnPayment } = require('./mtnMomo');
+const { isFlutterwaveConfigured, initiateFlutterwaveMobileMoneyCharge } = require('./flutterwave');
+const { isPesapalConfigured, initiatePesapalPayment } = require('./pesapal');
 function planPriceUgx(plan) {
   switch (plan) {
     case 'daily':
@@ -30,20 +33,94 @@ function paymentPromptMessage(plan, amountUgx) {
   const label = planLabel(plan);
   const formatted = `UGX ${Number(amountUgx).toLocaleString('en-UG')}`;
   return (
-    `Spark Dating: Approve ${formatted} for ${label} chat access. ` +
-    'A mobile money popup will appear on this phone — enter your PIN to pay.'
+    `${APP_DISPLAY_NAME}: Approve ${formatted} for ${label} chat access. ` +
+    'Check your phone for the mobile money payment popup and enter your PIN.'
   );
 }
 
-function isJwtApiKey(key) {
-  return typeof key === 'string' && key.startsWith('eyJ') && key.includes('.');
+function paymentsBaseUrl() {
+  if (process.env.AFRICAS_TALKING_PAYMENTS_SANDBOX === 'true') {
+    return 'https://payments.sandbox.africastalking.com';
+  }
+  return 'https://payments.africastalking.com';
 }
 
-function resolveAfricaTalkingApiKey() {
-  if (process.env.AFRICAS_TALKING_API_KEY) return process.env.AFRICAS_TALKING_API_KEY;
-  const birdKey = process.env.BIRD_API_KEY || '';
-  if (isJwtApiKey(birdKey)) return birdKey;
+function isMobileCheckoutConfigured() {
+  return !!(
+    process.env.AFRICAS_TALKING_USERNAME &&
+    resolveAfricaTalkingApiKey() &&
+    process.env.AFRICAS_TALKING_PAYMENT_PRODUCT_NAME
+  );
+}
+
+function preferredMobileMoneyProvider() {
+  return (process.env.MOBILE_MONEY_PROVIDER || '').trim().toLowerCase();
+}
+
+function resolveMobileMoneyProvider() {
+  const forced = preferredMobileMoneyProvider();
+  if (forced === 'mtn' && isMtnMomoConfigured()) return 'mtn';
+  if (forced === 'pesapal' && isPesapalConfigured()) return 'pesapal';
+  if (forced === 'flutterwave' && isFlutterwaveConfigured()) return 'flutterwave';
+  if (forced === 'africas_talking' && isMobileCheckoutConfigured()) return 'africas_talking';
+
+  if (isPesapalConfigured()) return 'pesapal';
+  if (isFlutterwaveConfigured()) return 'flutterwave';
+  if (isMtnMomoConfigured()) return 'mtn';
+  if (isMobileCheckoutConfigured()) return 'africas_talking';
   return null;
+}
+async function initiateAfricasTalkingMobileCheckout(phone, plan, amountUgx, metadata = {}) {
+  const username = process.env.AFRICAS_TALKING_USERNAME;
+  const apiKey = resolveAfricaTalkingApiKey();
+  const productName = process.env.AFRICAS_TALKING_PAYMENT_PRODUCT_NAME;
+
+  const body = {
+    username,
+    productName,
+    phoneNumber: phone,
+    currencyCode: process.env.AFRICAS_TALKING_CURRENCY_CODE || 'UGX',
+    amount: amountUgx,
+    metadata: {
+      plan,
+      ...metadata,
+    },
+  };
+
+  const providerChannel = process.env.AFRICAS_TALKING_PROVIDER_CHANNEL;
+  if (providerChannel) body.providerChannel = providerChannel;
+
+  const response = await fetch(`${paymentsBaseUrl()}/mobile/checkout/request`, {
+    method: 'POST',
+    headers: {
+      apiKey,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message =
+      payload?.errorMessage ||
+      payload?.description ||
+      payload?.message ||
+      (typeof payload === 'string' ? payload : JSON.stringify(payload));
+    console.error("Africa's Talking mobile checkout failed:", message);
+    throw new Error(
+      message?.trim() ||
+        "Could not start mobile money checkout. Check Africa's Talking payment product settings.",
+    );
+  }
+
+  const transactionId = payload.transactionId || payload.details?.transactionId || null;
+  if (!transactionId) {
+    console.error("Africa's Talking mobile checkout missing transactionId:", payload);
+    throw new Error('Mobile money checkout did not start. Try again in a moment.');
+  }
+
+  return { transactionId, status: payload.status || 'Pending', payload };
 }
 
 function birdApiBase(apiKey) {
@@ -148,7 +225,16 @@ async function sendAfricasTalkingSmsText(phone, text) {
   }
 }
 
-async function sendPaymentPromptSms(phone, plan) {
+function isAnyMobileMoneyProviderConfigured() {
+  return (
+    isPesapalConfigured() ||
+    isFlutterwaveConfigured() ||
+    isMtnMomoConfigured() ||
+    isMobileCheckoutConfigured()
+  );
+}
+
+async function sendPaymentPromptSms(phone, plan, metadata = {}) {
   const normalized = normalizePhone(phone);
   if (!normalized) {
     throw new Error('Enter a valid phone number');
@@ -159,41 +245,105 @@ async function sendPaymentPromptSms(phone, plan) {
     throw new Error('Invalid plan');
   }
 
-  const message = paymentPromptMessage(plan, amountUgx);
-  const provider = resolveSmsProvider();
+  const simulateRequested = process.env.MOBILE_MONEY_SIMULATE === 'true';
+  const providerReady = isAnyMobileMoneyProviderConfigured();
 
-  if (provider === 'console' || !isProviderConfigured(provider)) {
-    if (provider !== 'console') {
-      console.warn(
-        `[MobileMoney] SMS provider "${provider}" is not fully configured. Using console fallback.`,
-      );
-    }
-    console.log(`[MobileMoney] ${normalized} -> ${message}`);
-    return { delivered: false, channel: provider === 'console' ? 'console' : 'fallback', phone: normalized };
+  if (simulateRequested && !providerReady) {
+    console.log(
+      `[MobileMoney SIMULATE] ${normalized} plan=${plan} amount=${amountUgx} UGX — no real popup`,
+    );
+    return {
+      delivered: true,
+      channel: 'simulate',
+      phone: normalized,
+      transactionId: `SIM-${Date.now()}`,
+      simulated: true,
+    };
   }
 
-  if (provider === 'bird') {
-    await sendBirdSmsText(normalized, message);
-    return { delivered: true, channel: 'bird', phone: normalized };
+  if (!providerReady) {
+    throw new Error(
+      'Mobile money is not configured. Add PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET to backend/.env ' +
+        '(see PESAPAL_SETUP.md), or Flutterwave / MTN MoMo credentials.',
+    );
   }
 
-  if (provider === 'twilio') {
-    await sendTwilioSmsText(normalized, message);
-    return { delivered: true, channel: 'twilio', phone: normalized };
+  const provider = resolveMobileMoneyProvider();
+  if (!provider) {
+    throw new Error('Mobile money checkout failed to start. Check your payment provider credentials.');
+  }
+
+  if (provider === 'pesapal') {
+    const pesapal = await initiatePesapalPayment(normalized, plan, amountUgx, metadata);
+    return {
+      delivered: true,
+      channel: 'pesapal',
+      phone: normalized,
+      transactionId: pesapal.orderTrackingId,
+      merchantReference: pesapal.merchantReference,
+      redirectUrl: pesapal.redirectUrl,
+      checkoutStatus: pesapal.status,
+      paymentInstruction:
+        'Open the PesaPal payment page, choose Mobile Money (MTN/Airtel), and complete payment on your phone.',
+    };
+  }
+
+  if (provider === 'flutterwave') {
+    const fw = await initiateFlutterwaveMobileMoneyCharge(normalized, plan, amountUgx, metadata);
+    return {
+      delivered: true,
+      channel: 'flutterwave',
+      phone: normalized,
+      transactionId: fw.chargeId,
+      chargeReference: fw.reference,
+      checkoutStatus: fw.status,
+      paymentInstruction: fw.instruction,
+      network: fw.network,
+    };
+  }
+
+  if (provider === 'mtn') {
+    const momo = await initiateMtnPayment(normalized, plan, amountUgx, metadata);
+    return {
+      delivered: true,
+      channel: momo.mode === 'preapproval' ? 'mtn_momo_preapproval' : 'mtn_momo',
+      phone: normalized,
+      transactionId: momo.referenceId,
+      externalId: momo.externalId,
+      checkoutStatus: momo.status,
+      preApproval: momo.preApproval || null,
+      paymentInstruction:
+        'MTN Mobile Money popup sent to this phone. Enter your PIN to approve the payment.',
+      network: 'MTN',
+    };
   }
 
   if (provider === 'africas_talking') {
-    await sendAfricasTalkingSmsText(normalized, message);
-    return { delivered: true, channel: 'africas_talking', phone: normalized };
+    const checkout = await initiateAfricasTalkingMobileCheckout(
+      normalized,
+      plan,
+      amountUgx,
+      metadata,
+    );
+    return {
+      delivered: true,
+      channel: 'africas_talking_checkout',
+      phone: normalized,
+      transactionId: checkout.transactionId,
+      checkoutStatus: checkout.status,
+    };
   }
 
-  console.log(`[MobileMoney] ${normalized} -> ${message}`);
-  return { delivered: false, channel: 'unknown', phone: normalized };
+  throw new Error(
+    'Mobile money checkout failed to start. Check your payment provider credentials.',
+  );
 }
 
 module.exports = {
   planPriceUgx,
   planLabel,
   paymentPromptMessage,
+  isMobileCheckoutConfigured,
+  isAnyMobileMoneyProviderConfigured,
   sendPaymentPromptSms,
 };

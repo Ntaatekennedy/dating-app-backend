@@ -131,9 +131,17 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing.length) {
+    const [existingEmail] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (existingEmail.length) {
       return res.status(409).json({ error: 'Email already registered' });
+    }
+
+    const phone = profileInput.phone ? normalizePhone(profileInput.phone) : null;
+    if (phone) {
+      const [existingPhone] = await pool.query('SELECT id FROM users WHERE phone = ?', [phone]);
+      if (existingPhone.length) {
+        return res.status(409).json({ error: 'Phone number already registered' });
+      }
     }
 
     const userId = uuidv4();
@@ -149,7 +157,7 @@ router.post('/register', async (req, res) => {
       await conn.query(
         `INSERT INTO users (id, email, phone, password_hash, is_verified)
          VALUES (?, ?, ?, ?, FALSE)`,
-        [userId, email, profileInput.phone || null, hash],
+        [userId, email, phone, hash],
       );
 
       await conn.query(
@@ -215,6 +223,10 @@ router.post('/register', async (req, res) => {
   } catch (err) {
     console.error('Registration failed:', err);
     if (err.code === 'ER_DUP_ENTRY') {
+      const msg = String(err.message || '');
+      if (msg.includes('phone')) {
+        return res.status(409).json({ error: 'Phone number already registered' });
+      }
       return res.status(409).json({ error: 'Email already registered' });
     }
     res.status(500).json({ error: 'Registration failed' });

@@ -275,7 +275,13 @@ DELIMITER ;
 
 INSERT INTO interests (name) VALUES
     ('Travel'), ('Music'), ('Fitness'), ('Cooking'),
-    ('Photography'), ('Movies'), ('Hiking'), ('Reading');
+    ('Photography'), ('Movies'), ('Hiking'), ('Reading'),
+    ('Gaming'), ('Dancing'), ('Art'), ('Coffee'),
+    ('Sports'), ('Yoga'), ('Fashion'), ('Technology'),
+    ('Foodie'), ('Beach'), ('Pets'), ('Volunteering'),
+    ('Running'), ('Nightlife'), ('Camping'), ('Gardening'),
+    ('Swimming'), ('Board Games'), ('Writing'), ('Football'),
+    ('Entrepreneurship'), ('Podcasts');
 
 INSERT INTO users (id, email, phone, password_hash, is_verified, last_active_at) VALUES
     ('user-demo-me', 'demo@dating.app', '+256700100001', 'password123', TRUE, NOW()),

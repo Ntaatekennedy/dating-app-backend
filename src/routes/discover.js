@@ -8,6 +8,52 @@ const { resolveBaseUrl } = require('../utils/baseUrl');
 const { resolvePhotoUrl } = require('../utils/photoUrl');
 
 const router = express.Router();
+const DISCOVER_PAGE_SIZE = 20;
+const DISCOVER_MAX_LIMIT = 50;
+
+function parseDiscoverPaging(query) {
+  const offset = Math.max(0, Number.parseInt(query.offset, 10) || 0);
+  const requestedLimit = Number.parseInt(query.limit, 10);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(requestedLimit, 1), DISCOVER_MAX_LIMIT)
+    : DISCOVER_PAGE_SIZE;
+  return { offset, limit };
+}
+
+async function attachInterests(resultsSlice) {
+  const userIds = resultsSlice.map((r) => r._userId);
+  const interestMap = new Map();
+  if (userIds.length) {
+    const placeholders = userIds.map(() => '?').join(',');
+    const [interestRows] = await pool.query(
+      `SELECT ui.user_id, i.name
+       FROM user_interests ui
+       JOIN interests i ON i.id = ui.interest_id
+       WHERE ui.user_id IN (${placeholders})`,
+      userIds,
+    );
+    for (const row of interestRows) {
+      if (!interestMap.has(row.user_id)) interestMap.set(row.user_id, []);
+      interestMap.get(row.user_id).push(row.name);
+    }
+  }
+
+  return resultsSlice.map(({ _userId, ...rest }) => ({
+    ...rest,
+    interests: interestMap.get(_userId) || [],
+  }));
+}
+
+async function paginateDiscoverResults(results, offset, limit) {
+  const total = results.length;
+  const page = results.slice(offset, offset + limit);
+  const profiles = await attachInterests(page);
+  return {
+    profiles,
+    hasMore: offset + page.length < total,
+    total,
+  };
+}
 
 async function loadDiscoverCandidates(meId) {
   const [[myProfile]] = await pool.query('SELECT * FROM profiles WHERE user_id = ?', [meId]);
@@ -44,9 +90,7 @@ function canDiscoverProfile(myProfile, prefs, candidateRow) {
 }
 
 function buildDiscoverResults({ myProfile, prefs, rows, excludeSwipedIds, baseUrl }) {
-  const showMe = parseJsonArray(prefs.show_me);
-  const withinRange = [];
-  const outsideRange = [];
+  const results = [];
 
   for (const row of rows) {
     if (!canDiscoverProfile(myProfile, prefs, row)) continue;
@@ -70,31 +114,30 @@ function buildDiscoverResults({ myProfile, prefs, rows, excludeSwipedIds, baseUr
       );
     }
 
-    const entry = {
+    results.push({
       profile: mapProfile(row),
       primaryPhotoUrl: resolvePhotoUrl(baseUrl, row.primary_photo_url),
       distanceKm,
       interests: [],
       lastActiveAt: row.last_active_at,
       _userId: row.user_id,
-    };
-
-    if (distanceKm != null && distanceKm > prefs.max_distance_km) {
-      outsideRange.push(entry);
-    } else {
-      withinRange.push(entry);
-    }
+    });
   }
 
-  const poolResults = withinRange.length > 0 ? withinRange : outsideRange;
-  poolResults.sort((a, b) => {
+  results.sort((a, b) => {
+    const aBeyond =
+      a.distanceKm != null && a.distanceKm > prefs.max_distance_km ? 1 : 0;
+    const bBeyond =
+      b.distanceKm != null && b.distanceKm > prefs.max_distance_km ? 1 : 0;
+    if (aBeyond !== bBeyond) return aBeyond - bBeyond;
+
     const da = a.distanceKm ?? 99999;
     const db = b.distanceKm ?? 99999;
     if (da !== db) return da - db;
     return new Date(b.profile.updatedAt) - new Date(a.profile.updatedAt);
   });
 
-  return poolResults;
+  return results;
 }
 
 async function getChattedPartnerIds(meId) {
@@ -136,7 +179,7 @@ router.get('/', authRequired, async (req, res) => {
     const meId = req.user.userId;
     const baseUrl = resolveBaseUrl();
     const { myProfile, prefs, rows } = await loadDiscoverCandidates(meId);
-    if (!myProfile || !prefs) return res.json([]);
+    if (!myProfile || !prefs) return res.json({ profiles: [], hasMore: false, total: 0 });
 
     const [swiped] = await pool.query(
       'SELECT swiped_id, action FROM swipes WHERE swiper_id = ?',
@@ -180,29 +223,8 @@ router.get('/', authRequired, async (req, res) => {
         baseUrl,
       });
 
-      const userIds = results.map((r) => r._userId);
-      const interestMap = new Map();
-      if (userIds.length) {
-        const placeholders = userIds.map(() => '?').join(',');
-        const [interestRows] = await pool.query(
-          `SELECT ui.user_id, i.name
-           FROM user_interests ui
-           JOIN interests i ON i.id = ui.interest_id
-           WHERE ui.user_id IN (${placeholders})`,
-          userIds,
-        );
-        for (const row of interestRows) {
-          if (!interestMap.has(row.user_id)) interestMap.set(row.user_id, []);
-          interestMap.get(row.user_id).push(row.name);
-        }
-      }
-
-      const payload = results.slice(0, 20).map(({ _userId, ...rest }) => ({
-        ...rest,
-        interests: interestMap.get(_userId) || [],
-      }));
-
-      return res.json(payload);
+      const { offset, limit } = parseDiscoverPaging(req.query);
+      return res.json(await paginateDiscoverResults(results, offset, limit));
     }
 
     if (excludeChatted) {
@@ -216,29 +238,8 @@ router.get('/', authRequired, async (req, res) => {
         baseUrl,
       });
 
-      const userIds = results.map((r) => r._userId);
-      const interestMap = new Map();
-      if (userIds.length) {
-        const placeholders = userIds.map(() => '?').join(',');
-        const [interestRows] = await pool.query(
-          `SELECT ui.user_id, i.name
-           FROM user_interests ui
-           JOIN interests i ON i.id = ui.interest_id
-           WHERE ui.user_id IN (${placeholders})`,
-          userIds,
-        );
-        for (const row of interestRows) {
-          if (!interestMap.has(row.user_id)) interestMap.set(row.user_id, []);
-          interestMap.get(row.user_id).push(row.name);
-        }
-      }
-
-      const payload = results.slice(0, 20).map(({ _userId, ...rest }) => ({
-        ...rest,
-        interests: interestMap.get(_userId) || [],
-      }));
-
-      return res.json(payload);
+      const { offset, limit } = parseDiscoverPaging(req.query);
+      return res.json(await paginateDiscoverResults(results, offset, limit));
     }
 
     let results = buildDiscoverResults({
@@ -272,29 +273,8 @@ router.get('/', authRequired, async (req, res) => {
       });
     }
 
-    const userIds = results.map((r) => r._userId);
-    const interestMap = new Map();
-    if (userIds.length) {
-      const placeholders = userIds.map(() => '?').join(',');
-      const [interestRows] = await pool.query(
-        `SELECT ui.user_id, i.name
-         FROM user_interests ui
-         JOIN interests i ON i.id = ui.interest_id
-         WHERE ui.user_id IN (${placeholders})`,
-        userIds,
-      );
-      for (const row of interestRows) {
-        if (!interestMap.has(row.user_id)) interestMap.set(row.user_id, []);
-        interestMap.get(row.user_id).push(row.name);
-      }
-    }
-
-    const payload = results.slice(0, 20).map(({ _userId, ...rest }) => ({
-      ...rest,
-      interests: interestMap.get(_userId) || [],
-    }));
-
-    res.json(payload);
+    const { offset, limit } = parseDiscoverPaging(req.query);
+    res.json(await paginateDiscoverResults(results, offset, limit));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load discover profiles' });

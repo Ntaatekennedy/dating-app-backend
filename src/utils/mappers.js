@@ -105,12 +105,14 @@ function mapMessage(row) {
 
 function mapSubscription(row) {
   if (!row) return null;
+  const startsAt = row.starts_at;
+  const expiresAt = row.expires_at;
   return {
     id: row.id,
     userId: row.user_id,
     plan: row.plan,
-    startsAt: row.starts_at,
-    expiresAt: row.expires_at,
+    startsAt: startsAt instanceof Date ? startsAt.toISOString() : startsAt,
+    expiresAt: expiresAt instanceof Date ? expiresAt.toISOString() : expiresAt,
     isActive: !!row.is_active,
     paymentPhone: row.payment_phone,
   };

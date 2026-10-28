@@ -1,3 +1,6 @@
+const { Resend } = require('resend');
+const { APP_DISPLAY_NAME } = require('../constants');
+
 function resolveBirdApiKey() {
   return process.env.BIRD_API_KEY || '';
 }
@@ -63,19 +66,19 @@ function passwordResetEmailFrom() {
   const explicit = process.env.PASSWORD_RESET_EMAIL_FROM;
   if (explicit?.includes('<')) return explicit;
   const address = explicit || defaultFromAddress();
-  const name = process.env.PASSWORD_RESET_EMAIL_FROM_NAME || 'Spark Dating';
+  const name = process.env.PASSWORD_RESET_EMAIL_FROM_NAME || APP_DISPLAY_NAME;
   return `${name} <${address}>`;
 }
 
 function passwordResetEmailSubject() {
-  return process.env.PASSWORD_RESET_EMAIL_SUBJECT || 'Spark Dating password reset code';
+  return process.env.PASSWORD_RESET_EMAIL_SUBJECT || `${APP_DISPLAY_NAME} password reset code`;
 }
 
 function passwordResetEmailBody(code) {
   const ttl = process.env.OTP_TTL_MINUTES || '5';
   return (
     process.env.PASSWORD_RESET_EMAIL_BODY?.replace('{code}', code).replace('{ttl}', ttl) ||
-    `Your Spark Dating password reset code is ${code}. It expires in ${ttl} minutes. If you did not request this, ignore this email.`
+    `Your ${APP_DISPLAY_NAME} password reset code is ${code}. It expires in ${ttl} minutes. If you did not request this, ignore this email.`
   );
 }
 
@@ -121,7 +124,7 @@ function parseBirdError(details) {
 
 function parseResendError(details) {
   try {
-    const payload = JSON.parse(details);
+    const payload = typeof details === 'string' ? JSON.parse(details) : details;
     const message = payload?.message || payload?.error || '';
     if (/only send testing emails to your own email/i.test(message) || /resend\.dev/i.test(message)) {
       return (
@@ -133,7 +136,19 @@ function parseResendError(details) {
   } catch {
     // fall through
   }
-  return details?.trim() ? details.trim().slice(0, 280) : 'Failed to deliver email';
+  if (typeof details === 'string' && details.trim()) {
+    return details.trim().slice(0, 280);
+  }
+  return 'Failed to deliver email';
+}
+
+let resendClient;
+
+function getResendClient() {
+  if (!resendClient) {
+    resendClient = new Resend(resolveResendApiKey());
+  }
+  return resendClient;
 }
 
 async function sendBirdEmail(to, subject, text, html) {
@@ -179,7 +194,6 @@ async function sendBirdEmail(to, subject, text, html) {
 }
 
 async function sendResendEmail(to, subject, text, html) {
-  const apiKey = resolveResendApiKey();
   const from = passwordResetEmailFrom();
 
   if (isOnboardingSender(from)) {
@@ -189,31 +203,21 @@ async function sendResendEmail(to, subject, text, html) {
     );
   }
 
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject,
-      text,
-      html,
-    }),
+  const { data, error } = await getResendClient().emails.send({
+    from,
+    to,
+    subject,
+    text,
+    html,
   });
 
-  if (!response.ok) {
-    const details = await response.text();
-    console.error('Resend email failed:', details);
-    throw new Error(parseResendError(details));
+  if (error) {
+    console.error('Resend email failed:', error);
+    throw new Error(parseResendError(error));
   }
 
-  const payload = await response.json().catch(() => ({}));
   return {
-    id: payload.id || null,
+    id: data?.id || null,
     status: 'accepted',
   };
 }

@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { APP_DISPLAY_NAME } = require('../constants');
 
 function normalizePhone(raw) {
   if (!raw || typeof raw !== 'string') return null;
@@ -17,7 +18,7 @@ function generateOtpCode() {
 
 function otpMessage(code) {
   const ttl = process.env.OTP_TTL_MINUTES || '5';
-  return `Your Spark Dating verification code is ${code}. It expires in ${ttl} minutes.`;
+  return `Your ${APP_DISPLAY_NAME} verification code is ${code}. It expires in ${ttl} minutes.`;
 }
 
 function isJwtApiKey(key) {
@@ -210,4 +211,5 @@ module.exports = {
   sendOtpSms,
   isProviderConfigured,
   resolveSmsProvider,
+  resolveAfricaTalkingApiKey,
 };

@@ -10,8 +10,10 @@ const profileRoutes = require('./routes/profile');
 const subscriptionRoutes = require('./routes/subscriptions');
 const likesRoutes = require('./routes/likes');
 const userRoutes = require('./routes/users');
+const legalRoutes = require('./routes/legal');
 const { bootstrapDatabase } = require('../scripts/bootstrap-db');
 const { ensureAuthMigrations, ensureMessageDeliveryMigration, ensureProductionDataMigrations } = require('./utils/migrate');
+const { getUploadDir } = require('./utils/uploadPaths');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -23,11 +25,13 @@ app.set('json replacer', (_key, value) =>
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(getUploadDir()));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'dating-app-api' });
 });
+
+app.use('/', legalRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/discover', discoverRoutes);
@@ -46,6 +50,14 @@ bootstrapDatabase()
   .then(() => ensureAuthMigrations())
   .then(() => ensureMessageDeliveryMigration())
   .then(() => ensureProductionDataMigrations())
+  .then(() => {
+    const { isPesapalConfigured, requestToken } = require('./utils/pesapal');
+    if (isPesapalConfigured()) {
+      requestToken().catch((err) => {
+        console.warn('[PesaPal] Token warmup failed:', err.message);
+      });
+    }
+  })
   .catch((err) => {
     console.error('Database bootstrap failed:', err.message);
   });

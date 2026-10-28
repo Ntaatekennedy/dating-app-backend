@@ -30,17 +30,19 @@ Deploy from the [Railway dashboard](https://railway.com/dashboard) or the CLI.
    |----------|--------|
    | `JWT_SECRET` | A long random string |
    | `NODE_ENV` | `production` |
-   | `EMAIL_PROVIDER` | `bird` |
-   | `BIRD_WORKSPACE_ID` | `ws_01kwy5m1she1m8a1jm5g7dmqf8` |
-   | `BIRD_API_KEY` | Bird access key (`bk_eu1_...`) |
-   | `PASSWORD_RESET_EMAIL_FROM` | `onboarding@messagebird.dev` (or `noreply@your-verified-domain` after DNS) |
+   | `EMAIL_PROVIDER` | `resend` |
+   | `RESEND_API_KEY` | Your `re_...` key from [resend.com/onboarding](https://resend.com/onboarding) |
+   | `PASSWORD_RESET_EMAIL_FROM` | `onboarding@resend.dev` (or `noreply@your-verified-domain` after DNS) |
    | `PASSWORD_RESET_EMAIL_FROM_NAME` | `Spark Dating` |
    | `OTP_TTL_MINUTES` | `5` |
    | `SUBSCRIPTIONS_ENABLED` | `true` |
-   | `SMS_PROVIDER` | `bird` or `africas_talking` |
-   | `BIRD_NAVIGATOR_ID` | Navigator ID (SMS), or use `BIRD_CHANNEL_ID` |
+   | `SMS_PROVIDER` | `africas_talking` |
+   | `AFRICAS_TALKING_USERNAME` | Your AT username |
+   | `AFRICAS_TALKING_API_KEY` | Your AT API key |
+   | `AFRICAS_TALKING_PAYMENT_PRODUCT_NAME` | Uganda mobile money product from AT dashboard |
+   | `AFRICAS_TALKING_CURRENCY_CODE` | `UGX` |
 
-   See [EMAIL_SETUP.md](EMAIL_SETUP.md) for password reset email and [SMS_SETUP.md](SMS_SETUP.md) for SMS OTP.
+   See [EMAIL_SETUP.md](EMAIL_SETUP.md) for password reset email, [MOBILE_MONEY_SETUP.md](MOBILE_MONEY_SETUP.md) for subscription payments, and [SMS_SETUP.md](SMS_SETUP.md) for SMS OTP.
 
    `BASE_URL` is optional — Railway’s public domain is used automatically.
 

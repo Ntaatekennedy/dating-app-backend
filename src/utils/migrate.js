@@ -89,7 +89,7 @@ async function ensureMessageDeliveryMigration() {
 
 async function ensureProductionDataMigrations() {
   const migrationsDir = path.join(__dirname, '../../scripts/migrations');
-  const files = ['seed_more_users.sql', 'update_show_me_all_genders.sql'];
+  const files = ['add_more_interests.sql', 'seed_more_users.sql', 'update_show_me_all_genders.sql'];
 
   for (const file of files) {
     const filePath = path.join(migrationsDir, file);

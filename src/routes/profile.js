@@ -7,11 +7,11 @@ const pool = require('../config/db');
 const { authRequired } = require('../middleware/auth');
 const { mapProfile, mapPreferences, mapPhoto, mapInterest } = require('../utils/mappers');
 const { resolveBaseUrl } = require('../utils/baseUrl');
+const { getUploadDir, uploadsPublicPath, resolveStoredFilePath } = require('../utils/uploadPaths');
 
 const router = express.Router();
 
-const uploadDir = path.join(__dirname, '../../uploads');
-fs.mkdirSync(uploadDir, { recursive: true });
+const uploadDir = getUploadDir();
 
 const storage = multer.diskStorage({
   destination: uploadDir,
@@ -145,7 +145,7 @@ router.post('/photo', authRequired, upload.single('photo'), async (req, res) => 
     let url = req.body?.url;
 
     if (req.file) {
-      url = `/uploads/${req.file.filename}`;
+      url = uploadsPublicPath(req.file.filename);
     }
 
     if (!url) {
@@ -192,8 +192,8 @@ async function renumberUserPhotos(userId) {
 }
 
 function deleteStoredPhotoFile(url) {
-  if (!url || !url.startsWith('/uploads/')) return;
-  const filePath = path.join(__dirname, '../..', url);
+  const filePath = resolveStoredFilePath(url);
+  if (!filePath) return;
   fs.unlink(filePath, () => {});
 }
 
@@ -204,7 +204,7 @@ router.post('/photos', authRequired, upload.single('photo'), async (req, res) =>
     let url = req.body?.url;
 
     if (req.file) {
-      url = `/uploads/${req.file.filename}`;
+      url = uploadsPublicPath(req.file.filename);
     }
 
     if (!url) {
